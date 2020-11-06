@@ -1,2 +1,3 @@
-# elementary-mode-based-FBA-rationale
-Collaboration project between Daan and Eunice
+# elementary_mode_based_FBA_rationale
+
+TODO: Write description here
