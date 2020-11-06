@@ -15,7 +15,7 @@ model_name = "e_coli_core"
 #model_name = "lplawcfs1" #plantarum model Bas # species ending with _b are boundary species. extracellular compartment
 #model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
 # denoted with 'Extra_organism'
-model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
+#model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
 # network, but something goes wrong when calculating the activities of the ECMs in the FBA solution. Supremum norm is non-zero.
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
@@ -331,7 +331,7 @@ if model_name == '':
 # or only for the model with external metabolites that are ignored.
 # TODO: Make calculation stop when it takes too long, and give error message
 # For now I manually remove some models defined at top of the file
-# DROP_MODELS = [0,2,3]
+#DROP_MODELS = [1,2,3]
 list_model_dicts_remember = list_model_dicts.copy()
 list_model_dicts = [model_dict for index, model_dict in enumerate(list_model_dicts) if index not in DROP_MODELS]
 
@@ -452,19 +452,20 @@ else:
 # TODO: Make a function that finds an EFM corresponding to an ECM
 # TODO: Apply this function to the resulting ECMs for the hidden metabolites, to get a minimal network needed for these constraints
 # TODO: Apply this function (if feasible) for all ECMs, to get a minimal FBA-network
+
 # Find some EFM that corresponds to each of the active ECMs in the hidden-network
-for model_dict in list_model_dicts:
-    if model_dict['get_relevant_efms'] and model_dict['get_activities']:
-        relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
-                                                                       model_dict['ecms_df'],
-                                                                       infos_obj + infos_cons, model_dict['model_path'],
-                                                                       external_compartment=EXTERNAL_COMPARTMENT)
-        relevant_efms_df.to_csv(
-            os.path.join(
-                result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
-        full_relevant_ecms_df.to_csv(
-            os.path.join(
-                result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+# for model_dict in list_model_dicts:
+#     if model_dict['get_relevant_efms'] and model_dict['get_activities']:
+#         relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
+#                                                                        model_dict['ecms_df'],
+#                                                                        infos_obj + infos_cons, model_dict['model_path'],
+#                                                                        external_compartment=EXTERNAL_COMPARTMENT)
+#         relevant_efms_df.to_csv(
+#             os.path.join(
+#                 result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+#         full_relevant_ecms_df.to_csv(
+#             os.path.join(
+#                 result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
 
 """ problem solving """
 # print active ECMs
