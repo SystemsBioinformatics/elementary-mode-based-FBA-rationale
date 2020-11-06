@@ -1,17 +1,17 @@
 import copy
 import os
 from fractions import Fraction
+import math
 
 import cbmpy as cbm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import cm
-from scipy.optimize import linprog
-
 from ecmtool import extract_sbml_stoichiometry, get_conversion_cone
 from ecmtool.helpers import to_fractions, unique
 from ecmtool.network import add_reaction_tags  # was updated in v.0.1.6, was add_debug_tags
+from matplotlib import cm
+from scipy.optimize import linprog
 
 
 def findConstraintMetabolites(nzrc_dictionaries, intermediate_cmod):
@@ -38,7 +38,7 @@ def findConstraintMetabolites(nzrc_dictionaries, intermediate_cmod):
         found_external = False
         for stoich_pair in re_stoich:
             species = intermediate_cmod.getSpecies(stoich_pair[1])
-            if species.compartment in['e', 'Extra_organism']:
+            if species.compartment in ['e', 'Extra_organism']:
                 nzrc_dictionaries[nzrc_ind]['ext_metab'] = stoich_pair[1]
                 nzrc_dictionaries[nzrc_ind]['ext_metab_stoich'] = stoich_pair[0]
                 found_external = True
@@ -143,7 +143,7 @@ def delete_non_active_network(original_cmod, which_zeros='flux_zero', zero_tol=1
             cmod = original_cmod.clone()
             zero_tol = zero_tol / 10  # If we have removed to much: Adjust zero_tol and try again
             delete_reaction = []
-	
+
         if counter <= N_ITER:
             counter += 1
         else:
@@ -276,7 +276,7 @@ def get_nzrc(cmod):
     # The following finds tuples of reaction ids and their reduced costs.
     non_zero_reduced_cost_pairs = [(rid, cmod.getReaction(rid).reduced_cost) for rid in
                                    cmod.getReactionIds() if
-                                   round(abs(cmod.getReaction(rid).reduced_cost),15) > 0] #round to 10 decimals
+                                   round(abs(cmod.getReaction(rid).reduced_cost), 15) > 0]  # round to 10 decimals
 
     # TODO: This does not work with more general constraints than flux bound yet.
     n_objectives = 1
@@ -336,7 +336,8 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     :param hide_metabs: indices of metabolites that should be ignored
     """
     # Stap 1: netwerk bouwen
-    network = extract_sbml_stoichiometry(file_path, determine_inputs_outputs=True, external_compartment=external_compartment)
+    network = extract_sbml_stoichiometry(file_path, determine_inputs_outputs=True,
+                                         external_compartment=external_compartment)
 
     indices_to_tag = []
     print([reaction.id for reaction in network.reactions])
@@ -345,7 +346,7 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
             ind_to_tag = [ind for ind, reaction in enumerate(network.reactions) if reaction.id == rid]
             print(rid)
             print(ind_to_tag)
-            #indices_to_tag.append(ind_to_tag[0])
+            # indices_to_tag.append(ind_to_tag[0])
             indices_to_tag += ind_to_tag
 
         add_reaction_tags(network, reactions=indices_to_tag)
@@ -359,16 +360,16 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     # Stap 2: compress network
     if print_results:
         print("\n", "Compressing network")
-    network.compress(verbose=False)  #verbose was True
+    network.compress(verbose=False)  # verbose was True
 
     # Stap 3: Ecms enumereren
-    #TODO: add timer on enumerating ECMs. tic toc? 
+    # TODO: add timer on enumerating ECMs. tic toc?
     if print_results:
         print("\n", "Enumerating ECMs")
     cone = network.uncompress(
         get_conversion_cone(network.N, network.external_metabolite_indices(), network.reversible_reaction_indices(),
                             network.input_metabolite_indices(), network.output_metabolite_indices(), only_rays=False,
-                            verbose=True)) #verbose was True
+                            verbose=True))  # verbose was True
 
     if print_results:
         print_ECMs(cone, indices_to_tag, network, orig_N, add_objective_metabolite=True, check_feasibility=True)
@@ -376,6 +377,7 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     cone = cone.transpose()  # columns will be the different ECMs, rows are metabolites
 
     return cone, full_network
+
 
 def normalize_to_row(matrix, row_ind, not_normalized_yet):
     """
@@ -407,6 +409,7 @@ def normalize_to_row(matrix, row_ind, not_normalized_yet):
     matrix[:, ecms_to_be_normalized] = np.divide(matrix[:, ecms_to_be_normalized], divisor_matrix)
     not_normalized_yet = np.delete(not_normalized_yet, normalized_indices)
     return matrix, not_normalized_yet
+
 
 # def normalize_to_row_splitted(matrix, row_ind, not_normalized_yet):
 #     """
@@ -473,6 +476,7 @@ def igen(a, n, m):
     for i, j in product(np.unique(i_), np.unique(j_)):
         yield (i, j), a[i_ == i][:, j_ == j]
 
+
 def matrix_splitter(matrix, split_num):
     col_divider = list(range(matrix.shape[1]))
     dict_col_divider = dict()
@@ -485,6 +489,7 @@ def matrix_splitter(matrix, split_num):
         dict_matrix[i] = matrix[:, dict_col_divider[i]]
 
     return dict_matrix
+
 
 def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
     """
@@ -499,6 +504,7 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
     :param normalization_order: list of metab-IDs
             List of ordered metabolite-IDs
     """
+    MATRIX_SPLIT = 100000  # 100000
     # Determine an order for normalizing the metabolites, if none is given
     # ECMs that are used often are picked first for normalization. To compare two ECM results, make sure to pick the
     # same normalization order
@@ -508,14 +514,15 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
     not_normalized_yet = list(range(ecms_matrix.shape[1]))  # This tracks which ECMs need to be normalized still
     zero_cols = np.where(np.count_nonzero(ecms_matrix, axis=0)==0)[0]
     not_normalized_yet = np.delete(not_normalized_yet, zero_cols)
+
     # If matrix.shape[1] > 100000: split the matrix in smaller subsets.
-    if ecms_matrix.shape[1] > 200000:
+    if ecms_matrix.shape[1] > MATRIX_SPLIT:  # 100000
         # split matrix in smaller subsets
         print('Split ECMs matrix, because number of ECMs is higher then 100000: ' + str(ecms_matrix.shape[1]))
         print('This takes time.')
-        #matrix_dict = dict(igen(ecms_matrix, ecms_matrix.shape[0], 100000))
-        matrix_dict = matrix_splitter(ecms_matrix, 100000)
-        #not_normalized_yet_dict =
+        # matrix_dict = dict(igen(ecms_matrix, ecms_matrix.shape[0], 100000))
+        matrix_dict = matrix_splitter(ecms_matrix, MATRIX_SPLIT)
+        # not_normalized_yet_dict =
         print('ECMs matrix is splitted in ' + str(len(matrix_dict)))
 
         # Create dict to keep track of which ECMs need to be normalized still.
@@ -525,7 +532,8 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
 
         # Then normalize all ECMs to one of the metabolites
         for metab in normalization_order:
-            print('Normalizing with ' + metab + 'because ' + str(len(not_normalized_yet)) + ' ecms are not yet normalized.')
+            print('Normalizing with ' + metab + 'because ' + str(
+                len(not_normalized_yet)) + ' ecms are not yet normalized.')
             if not len(not_normalized_yet):
                 break
 
@@ -534,11 +542,14 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
             # Normalize ECMs
             for key in matrix_dict.keys():
                 print('Normalizing matrix ' + str(key))
-                matrix_dict[key], dict_not_normalized_yet[key] = normalize_to_row(matrix_dict[key], metab_index, dict_not_normalized_yet[key])
+                # print(matrix_dict[key])
+                matrix_dict[key], dict_not_normalized_yet[key] = normalize_to_row(matrix_dict[key], metab_index,
+                                                                                  dict_not_normalized_yet[key])
+                # print(matrix_dict[key])
 
             # If all ECMs are normalized, i.e. all lists in dict_not_normalized_yet are empty,
             # then normalization is finished; normalized ECMs matrix will be returned
-            if len([j for j in list(range(len(dict_not_normalized_yet))) if len(dict_not_normalized_yet[j])>0]) == 0:
+            if len([j for j in list(range(len(dict_not_normalized_yet))) if len(dict_not_normalized_yet[j]) > 0]) == 0:
                 print('Normalization is done, splitted matrices will be concatenated and returned.')
                 # Combine splitted matrix into one again.
                 normalized_ecms_matrix = np.concatenate(
@@ -549,7 +560,6 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
     else:
         # Then normalize all ECMs to one of the metabolites
         for metab in normalization_order:
-            # print('Normalizing ' + metab)
             print('Normalizing with ' + metab + 'because ' + str(
                 len(not_normalized_yet)) + ' ecms are not yet normalized.')
             if not len(not_normalized_yet):
@@ -561,7 +571,83 @@ def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
             # If all ECMs are normalized, we can stop normalizing and normalized ecms_matrix will be returned
             if len(not_normalized_yet) == 0:
                 return ecms_matrix
-    return ecms_matrix
+
+
+def normalize_ECMS_smarter(ecms_matrix, network, normalization_order=[]):
+    """
+    Normalizes ECMs first to first objective. If there are also lower bounds that act as a kind of second objective.
+    Then normalize the ECMs with zero objective to this second objective.
+    :return ecms_matrix: np.array
+            This array contains the normalized ECMs as columns and the metabolites as rows
+    :param ecms_matrix:
+            This array contains the ECMs as columns and the metabolites as rows
+    :param network: Network class
+            Network class as comes from ECMtool
+    :param normalization_order: list of metab-IDs
+            List of ordered metabolite-IDs
+    """
+    MATRIX_SPLIT = 1000  # 100000
+    # Determine an order for normalizing the metabolites, if none is given
+    # ECMs that are used often are picked first for normalization. To compare two ECM results, make sure to pick the
+    # same normalization order
+    if not len(normalization_order):
+        normalization_order = determine_normalization_order(ecms_matrix, network)
+
+    not_normalized_yet = list(range(ecms_matrix.shape[1]))  # This tracks which ECMs need to be normalized still
+
+    # If matrix.shape[1] > 100000: split the matrix in smaller subsets.
+    # if ecms_matrix.shape[1] > MATRIX_SPLIT: #100000
+    #     # split matrix in smaller subsets
+    #     print('Split ECMs matrix, because number of ECMs is higher then 100000: ' + str(ecms_matrix.shape[1]))
+    #     print('This takes time.')
+    #     #matrix_dict = dict(igen(ecms_matrix, ecms_matrix.shape[0], 100000))
+    #     matrix_dict = matrix_splitter(ecms_matrix, MATRIX_SPLIT)
+    #     #not_normalized_yet_dict =
+    #     print('ECMs matrix is splitted in ' + str(len(matrix_dict)))
+    #
+    #     # Create dict to keep track of which ECMs need to be normalized still.
+    #     dict_not_normalized_yet = dict()
+    #     for i in matrix_dict.keys():
+    #         dict_not_normalized_yet[i] = list(range(matrix_dict[i].shape[1]))
+    #
+    #     # Then normalize all ECMs to one of the metabolites
+    #     for metab in normalization_order:
+    #         print('Normalizing ' + metab)
+    #         if not len(not_normalized_yet):
+    #             break
+    #
+    #         metab_index = [index for index, met in enumerate(network.metabolites) if met.id == metab][0]
+    #
+    #         # Normalize ECMs
+    #         for key in matrix_dict.keys():
+    #             print('Normalizing matrix ' + str(key))
+    #             #print(matrix_dict[key])
+    #             matrix_dict[key], dict_not_normalized_yet[key] = normalize_to_row(matrix_dict[key], metab_index, dict_not_normalized_yet[key])
+    #             #print(matrix_dict[key])
+    #
+    #         # If all ECMs are normalized, i.e. all lists in dict_not_normalized_yet are empty,
+    #         # then normalization is finished; normalized ECMs matrix will be returned
+    #         if len([j for j in list(range(len(dict_not_normalized_yet))) if len(dict_not_normalized_yet[j])>0]) == 0:
+    #             print('Normalization is done, splitted matrices will be concatenated and returned.')
+    #             # Combine splitted matrix into one again.
+    #             normalized_ecms_matrix = np.concatenate(
+    #                 [matrix_dict[i] for i in list(range(len(matrix_dict)))],
+    #                 axis=1)
+    #             return normalized_ecms_matrix
+
+    # else:
+    # Then normalize all ECMs to one of the metabolites
+    for metab in normalization_order:
+        print('Normalizing ' + metab)
+        if not len(not_normalized_yet):
+            break
+
+        metab_index = [index for index, met in enumerate(network.metabolites) if met.id == metab][0]
+        ecms_matrix, not_normalized_yet = normalize_to_row(ecms_matrix, metab_index, not_normalized_yet)
+
+        # If all ECMs are normalized, we can stop normalizing and normalized ecms_matrix will be returned
+        if len(not_normalized_yet) == 0:
+            return ecms_matrix
 
 
 def normalize_ECMS_objective_first(ecms_matrix, network, infos_obj, verbose=True):
@@ -598,8 +684,8 @@ def normalize_ECMS_objective_first(ecms_matrix, network, infos_obj, verbose=True
     if verbose:
         print('Normalizing in the following order:')
         print(objective_metab)
-        print(*secondary_objectives, sep=', ') #Eunice edit
-        print(*tertiary_objectives, sep=', ') #Eunice edit
+        print(*secondary_objectives, sep=', ')  # Eunice edit
+        print(*tertiary_objectives, sep=', ')  # Eunice edit
 
     # First normalize everything that can be normalized for the real objective
     ecms_matrix = normalize_ECMS(ecms_matrix, network, [objective_metab] + secondary_objectives + tertiary_objectives)
@@ -621,7 +707,7 @@ def calc_EFMs(network, result_dir, verbose=True):
 
     # Add your own folder here where efmtool is located
     efmtool_folder = "C:\\Users\\Eunice van Pelt\\Desktop\\whole-cell-model\\eunice\\Daan\\efmtool"
-    efmtool_folder = "C:\\Users\\Daan\\surfdrive\\PhD\\Software\\efmtool"
+    # "C:\\Users\\Daan\\surfdrive\\PhD\\Software\\efmtool"
 
     # Use the same stoichiometric matrix as used for the ECM-calculation
     stoich_matrix = network.N
@@ -652,7 +738,7 @@ def calc_EFMs(network, result_dir, verbose=True):
     engine = matlab.engine.start_matlab()
     # Uses our own Matlab-function to set EFMtool to the task of calculating EFMs
     result = engine.calculate_efms_wo_SBML(efmtool_folder, result_dir)
-    # print("matlab result \n", result) 
+    # print("matlab result \n", result)
     size_efms = result.size
     # print(size_efms)
     # The following is a fast way of importing large arrays from Matlab
@@ -726,7 +812,7 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         # Make cost table with only the constraints that are to be shown
         cost_df, cons_indices = get_cost_df(model_dict, infos_cons, cons_IDs, index, objective_dict,
                                             scaling_factor=scaling_factor)
-        # print(cost_df)
+        print(cost_df)
 
         if show_active and 'active' not in cost_df.columns:
             print("Can't show active EFMs if this information is not provided.")
@@ -775,7 +861,7 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         quiver_start = quiver_start[:-1, :]
         # Add the x,y-lengths of the vectors as two additional columns
         ecm_usage = np.append(quiver_start, ecm_usage, axis=1)
-        # print(ecm_usage)
+        print(ecm_usage)
 
         # The following thus are the x,y-begin positions of the vectors, and the x,y-length
         Xusage, Yusage, Uusage, Vusage = zip(*ecm_usage)
@@ -788,7 +874,7 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         actECMs.plot(kind='scatter', x=x_label, y=y_label, color=cmap_curr, ax=ax, s=scatter_active, alpha=alpha_active)
 
         # Plot the usage of ECMs as vectors
-        #for i in range(len(Xusage)):
+        # for i in range(len(Xusage)):
         #    color = cmap_curr[i, :]
         #    ax.quiver(Xusage[i], Yusage[i], Uusage[i], Vusage[i], pivot='tail', angles='xy', scale_units='xy',
         #              linestyle='--', color=color, scale=1, width=quiverwidth)
@@ -801,14 +887,14 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         ax.plot([1, 1], [y_llim, y_ulim], '--', color='grey', linewidth=2.0)
         ax.set_xlim([x_llim, x_ulim])
         ax.set_ylim([y_llim, y_ulim])
-        #plt.xlabel('Needed fraction of constraint: ' + x_label)
+        # plt.xlabel('Needed fraction of constraint: ' + x_label)
         ax.set(xlabel='Needed fraction of constraint: ' + x_label)
         if 'virtual' in cons_IDs:
             ax.axes.get_yaxis().set_visible(False)
             ax.axhline(y=0, color='grey', linewidth=2.0)
         else:
             ax.set(ylabel='Needed fraction of constraint: ' + y_label)
-            #plt.ylabel('Needed fraction of constraint: ' + y_label)
+            # plt.ylabel('Needed fraction of constraint: ' + y_label)
             ax.plot([0, 1], [0, 1], '-.', color='grey')
             ax.axes.get_yaxis().set_visible(True)
             ax.plot([0, x_ulim], [1, 1], '--', color='grey', linewidth=2.0)
@@ -819,13 +905,12 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
             ax.quiver(Xusage[i], Yusage[i], Uusage[i], Vusage[i], pivot='tail', angles='xy', scale_units='xy',
                       linestyle='--', color=color, scale=1, width=quiverwidth)
 
-
         if objective_dict['obj_cons'] == 'obj':
             ax.set_title("Fraction needed per %.2f:\n" % scaling_factor + obj_string)
-            #plt.title("Fraction needed per %.2f:\n" % scaling_factor + obj_string)
+            # plt.title("Fraction needed per %.2f:\n" % scaling_factor + obj_string)
         else:
             ax.set_title("Fraction needed for demanded:\n" + obj_string)
-            #plt.title("Fraction needed for demanded:\n" + obj_string)
+            # plt.title("Fraction needed for demanded:\n" + obj_string)
 
         ax.legend(loc='upper right')
 
@@ -965,6 +1050,8 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
     :param cons_IDs: list of cons_IDs
             List of strings reflecting the different constraints that should be plotted
     """
+    # TODO: option to choose which constraints you want to show together, e.g. glc in combi with all other constraints
+
     # Some important numbers
     n_approaches = len(list_model_dicts)
     n_objectives = len(infos_obj)
@@ -982,7 +1069,7 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
 
     # Create one figure with n subplots, where n is the number of 'objectives'. A lower bound that should be met is also
     # considered an objective here.
-    fig, axes = plt.subplots(1, n_objectives)
+    fig, axes = plt.subplots(1, n_objectives, figsize=(10, 5))
     if n_objectives == 1:
         axes = [axes]  # Necessary evil
 
@@ -1004,22 +1091,23 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
             model_dict = list_model_dicts[ind_approach]
             print()
 
-            #filtered_cons_IDs = [rid for rid in cons_IDs if rid['rid'] in model_dict['model'].getReactionIDs()]
+            # filtered_cons_IDs = [rid for rid in cons_IDs if rid['rid'] in model_dict['model'].getReactionIDs()]
             filtered_cons_IDs = cons_IDs
 
             # Make cost table with only the constraints that are to be shown
-            cost_df, cons_indices = get_cost_df(model_dict, infos_cons, filtered_cons_IDs, index, objective_dict, #was infos_cons, cons_IDs
+            cost_df, cons_indices = get_cost_df(model_dict, infos_cons, filtered_cons_IDs, index, objective_dict,
+                                                # was infos_cons, cons_IDs
                                                 scaling_factor=scaling_factor)
 
-            x_label = filtered_cons_IDs[0] #cons_IDs[0]
-            y_label = filtered_cons_IDs[1] #cons_IDs[1]
+            x_label = filtered_cons_IDs[0]  # cons_IDs[0]
+            y_label = filtered_cons_IDs[1]  # cons_IDs[1]
 
             x_llim = y_llim = 0
             # Determine the bounds for the axes along which we want to plot the costs. It is a bit complicated, but
             # works
-            # print(cons_indices)
-            # print(cost_df)
-            # print(max(cost_df.values[:, 0]))
+            print(cons_indices)
+            print(cost_df)
+            print(max(cost_df.values[:, 0]))
             if objective_dict['obj_cons'] == 'obj':
                 x_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 0]) * 1.1)))
                 y_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 1]) * 1.1)))
@@ -1040,6 +1128,7 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
 
         # Set dimensions of the plot and configure axes
         # Also we make a light grey "constraint-box". The allowed region for solutions should be in this box.
+        ax.set(adjustable='box', aspect='equal')
         y_ulim = max(y_ulims)
         x_ulim = max(x_ulims)
         plt.plot([1, 1], [y_llim, y_ulim], '--', color='grey', linewidth=2.0)
@@ -1063,10 +1152,13 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
         plt.legend(loc='upper right')
 
     if result_dir:
+        # plt.tight_layout()
         plt.savefig(
-            os.path.join(result_dir, "various_approaches_constraints_" + cons_IDs[0] + "_" + cons_IDs[1] + ".png"))
+            os.path.join(result_dir,
+                         "various_approaches_constraints_" + cons_IDs[0] + "_" + cons_IDs[1] + ".png"))  # , dpi=600)
     else:
-        plt.savefig(os.path.join(os.getcwd(), "various_approaches.png"))
+        # plt.tight_layout()
+        plt.savefig(os.path.join(os.getcwd(), "various_approaches.png"))  # , dpi=600)
 
 
 def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[]):
@@ -1092,7 +1184,7 @@ def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[]):
 
 
 def get_ecm_df(result_dir, model_path, infos_obj, to_be_tagged=[], print_results=False, hide_indices=[],
-                   get_EFMs=True, external_compartment='e'):
+               get_EFMs=True, external_compartment='e'):
     """
     Gets cost table for each objective function.
     :param result_dir: string
@@ -1120,8 +1212,9 @@ def get_ecm_df(result_dir, model_path, infos_obj, to_be_tagged=[], print_results
             Dataframe with all ECMs calculated from the EFMs by multiplying with stoichiometry
     """
     ecms_matrix, full_network_ecm = calc_ECMs(model_path, reactions_to_tag=to_be_tagged,
-                                              print_results=print_results, hide_metabs=hide_indices, external_compartment=external_compartment)
-    # print(ecms_matrix)
+                                              print_results=print_results, hide_metabs=hide_indices,
+                                              external_compartment=external_compartment)
+    print(ecms_matrix)
 
     # Normalize the ECMs. We first normalize all ECMs that produce the objective to produce one objective, after that
     # we normalize to different metabolite productions, such that the ECMs are maximally comparable
@@ -1314,7 +1407,7 @@ def convert_flux_vector_to_conversion(flux_vector, cmod, network):
     return conv_vector
 
 
-#def unique(matrix): ## eunice_edit
+# def unique(matrix): ## eunice_edit
 #    unique_set = {tuple(row) for row in matrix if np.count_nonzero(row) > 0}
 #    return np.vstack(unique_set) if len(unique_set) else to_fractions(np.ndarray(shape=(0, matrix.shape[1])))
 
@@ -1364,12 +1457,14 @@ def convert_EFMs_to_ECMs(efms_df, network, infos_obj, verbose=True):
 
     # Round off to some decimal places. It seems that EFMtool introduces many round-off errors.
     ext_ecms_array = ecms_array[ext_indices, :]
-    # print(ext_ecms_array)
-    # print(np.size(ecms_array))
-    # print(type(ext_ecms_array))
+    print(ext_ecms_array)
+    print(np.size(ecms_array))
+    print(type(ext_ecms_array))
+    # ecms_array[ext_indices, :] = np.around(ext_ecms_array.astype(np.double), decimals=2)
     ext_ecms_array_rounded = np.around(ext_ecms_array.astype(np.double), decimals=2)
 
     # Keep only the unique ECMs
+    # ecms_array = np.transpose(unique(np.transpose(ecms_array)))
     dummy, unique_inds = np.unique(ext_ecms_array_rounded, axis=1, return_index=True)
     ext_ecms_array = ext_ecms_array[:, unique_inds]
 
@@ -1525,6 +1620,7 @@ def print_ECMs(cone, debug_tags, network, orig_N, add_objective_metabolite, chec
         #                        bounds=[(-1000, 1000)] * orig_N.shape[1], options={'tol': allowed_error})
         #     print('ECM satisfies stoichiometry' if solution.status == 0 else 'ECM does not satisfy stoichiometry')
 
+
 def check_bijection_csvs(ecms_first_df, ecms_second_df):
     """
     :param ecms_first_df: DataFrame
@@ -1552,7 +1648,7 @@ def check_bijection_csvs(ecms_first_df, ecms_second_df):
     n_ecms_second = ecms_second.shape[1]
 
     # Find matching of metab_ids
-    matching_inds =np.zeros(len(metab_ids_first))
+    matching_inds = np.zeros(len(metab_ids_first))
     for id_ind, id in enumerate(metab_ids_first):
         matching_inds[id_ind] = [id_ind_sec for id_ind_sec, id_sec in enumerate(metab_ids_second) if id_sec == id][0]
 
@@ -1567,11 +1663,11 @@ def check_bijection_csvs(ecms_first_df, ecms_second_df):
 
     # Normalize both sets of ECMs
     sum_columns_first = np.sum(np.abs(ecms_first), axis=0)
-    sum_columns_first = sum_columns_first[np.newaxis,:]
+    sum_columns_first = sum_columns_first[np.newaxis, :]
     ecms_first = ecms_first / np.repeat(sum_columns_first, ecms_first.shape[0], axis=0)
 
     sum_columns_second = np.sum(np.abs(ecms_second), axis=0)
-    sum_columns_second = sum_columns_second[np.newaxis,:]
+    sum_columns_second = sum_columns_second[np.newaxis, :]
     ecms_second = ecms_second / np.repeat(sum_columns_second, ecms_second.shape[0], axis=0)
 
     found_match_ecms_first = [False] * n_ecms_first
@@ -1601,13 +1697,14 @@ def check_bijection_csvs(ecms_first_df, ecms_second_df):
 
     return bijection_YN, ecms_first_min_ecms_second, ecms_second_min_ecms_first
 
+
 def get_active_ecms(model_dict):
-    #TODO: find active ecms and select only the relevant input output metabolites with usage values compared ...
+    # TODO: find active ecms and select only the relevant input output metabolites with usage values compared ...
     # to one unit objective
 
     idx = list(model_dict['table_cons_df']['active'][model_dict['table_cons_df']['active'] != 0.].index)
 
-    model_dict['ecms_df'][model_dict['ecms_df'][idx]!=0]
+    model_dict['ecms_df'][model_dict['ecms_df'][idx] != 0]
 
     a = model_dict['ecms_df'][idx] != 0
 
