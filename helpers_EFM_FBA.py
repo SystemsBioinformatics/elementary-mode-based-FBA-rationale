@@ -491,7 +491,7 @@ def matrix_splitter(matrix, split_num):
     return dict_matrix
 
 
-def normalize_ECMS_new_over_old(ecms_matrix, network, normalization_order=[]):
+def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
     """
     Normalizes ECMs first to first objective. If there are also lower bounds that act as a kind of second objective.
     Then normalize the ECMs with zero objective to this second objective.
@@ -573,88 +573,6 @@ def normalize_ECMS_new_over_old(ecms_matrix, network, normalization_order=[]):
             if len(not_normalized_yet) == 0:
                 return ecms_matrix
 
-
-def normalize_ECMS(ecms_matrix, network, normalization_order=[]):
-    """
-    Normalizes ECMs first to first objective. If there are also lower bounds that act as a kind of second objective.
-    Then normalize the ECMs with zero objective to this second objective.
-    :return ecms_matrix: np.array
-            This array contains the normalized ECMs as columns and the metabolites as rows
-    :param ecms_matrix:
-            This array contains the ECMs as columns and the metabolites as rows
-    :param network: Network class
-            Network class as comes from ECMtool
-    :param normalization_order: list of metab-IDs
-            List of ordered metabolite-IDs
-    """
-    MATRIX_SPLIT = 100000
-    # Determine an order for normalizing the metabolites, if none is given
-    # ECMs that are used often are picked first for normalization. To compare two ECM results, make sure to pick the
-    # same normalization order
-    if not len(normalization_order):
-        normalization_order = determine_normalization_order(ecms_matrix, network)
-
-    not_normalized_yet = list(range(ecms_matrix.shape[1]))  # This tracks which ECMs need to be normalized still
-    zero_cols = np.where(np.count_nonzero(ecms_matrix, axis=0)==0)[0]
-    not_normalized_yet = np.delete(not_normalized_yet, zero_cols)
-
-    # If matrix.shape[1] > 100000: split the matrix in smaller subsets.
-    if ecms_matrix.shape[1] > MATRIX_SPLIT:  # 100000
-        # split matrix in smaller subsets
-        print('Split ECMs matrix, because number of ECMs is higher then '  + str(MATRIX_SPLIT) + ': ' + str(ecms_matrix.shape[1]))
-        print('This takes time.')
-        # matrix_dict = dict(igen(ecms_matrix, ecms_matrix.shape[0], 100000))
-        matrix_dict = matrix_splitter(ecms_matrix, MATRIX_SPLIT)
-        # not_normalized_yet_dict =
-        print('ECMs matrix is splitted in ' + str(len(matrix_dict)))
-
-        # Create dict to keep track of which ECMs need to be normalized still.
-        dict_not_normalized_yet = dict()
-        for i in matrix_dict.keys():
-            dict_not_normalized_yet[i] = list(range(matrix_dict[i].shape[1]))
-
-        #  Normalize ECMs
-        for key in matrix_dict.keys():
-            print('Normalizing matrix ' + str(key) + ' of ' + str(len(matrix_dict)))
-
-            # Then normalize all ECMs to one of the metabolites
-            for metab in normalization_order:
-                print('Normalizing with ' + metab + ' because ' + str(
-                    len(dict_not_normalized_yet[key])) + ' ecms are not yet normalized.')
-                if not len(dict_not_normalized_yet[key]):
-                    break
-
-                metab_index = [index for index, met in enumerate(network.metabolites) if met.id == metab][0]
-                # print(matrix_dict[key])
-                matrix_dict[key], dict_not_normalized_yet[key] = normalize_to_row(matrix_dict[key], metab_index,
-                                                                                  dict_not_normalized_yet[key])
-                # print(matrix_dict[key])
-                if len(dict_not_normalized_yet[key]) == 0:
-                    break
-
-        # If all ECMs are normalized, i.e. all lists in dict_not_normalized_yet are empty,
-        # then normalization is finished; normalized ECMs matrix will be returned
-        print('Normalization is done, splitted matrices will be concatenated and returned.')
-        # Combine splitted matrix into one again.
-        normalized_ecms_matrix = np.concatenate(
-            [matrix_dict[i] for i in list(range(len(matrix_dict)))],
-            axis=1)
-        return normalized_ecms_matrix
-
-    else:
-        # Then normalize all ECMs to one of the metabolites
-        for metab in normalization_order:
-            print('Normalizing with ' + metab + ' because ' + str(
-                len(not_normalized_yet)) + ' ecms are not yet normalized.')
-            if not len(not_normalized_yet):
-                break
-
-            metab_index = [index for index, met in enumerate(network.metabolites) if met.id == metab][0]
-            ecms_matrix, not_normalized_yet = normalize_to_row(ecms_matrix, metab_index, not_normalized_yet)
-
-            # If all ECMs are normalized, we can stop normalizing and normalized ecms_matrix will be returned
-            if len(not_normalized_yet) == 0:
-                return ecms_matrix
 
 def normalize_ECMS_objective_first(ecms_matrix, network, infos_obj, verbose=True):
     """
