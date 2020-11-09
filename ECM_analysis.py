@@ -70,7 +70,7 @@ if model_name == "e_coli_core":
     glc_reaction.setLowerBound(-10.) #is original
     #glc_reaction.reversible = False # was True
 
-    DROP_MODELS = [] #[0, 2]  # [0]  # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
+    DROP_MODELS = [0, 2] #[0, 2]  # [0]  # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 
 elif model_name == 'iAF1260b_new':
     # E. coli
@@ -205,7 +205,7 @@ else:
 
 # Create dictionary for active subnetwork
 list_model_dicts.append(
-    {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': False, 'get_activities': True,
+    {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': True, 'get_activities': True,
      'get_relevant_efms': True})
 
 # Delete only reactions that are never active (based on FVA)
@@ -387,7 +387,7 @@ for model_dict in list_model_dicts:
 # Store data
 # with current data_time in name ? then it cannot be overwritten
 import datetime
-
+# TODO: Remove these print-statements or add annotation
 now = datetime.datetime.now()
 print("Current date and time : ")
 print(now.strftime("%Y-%m-%d %H:%M:%S"))
