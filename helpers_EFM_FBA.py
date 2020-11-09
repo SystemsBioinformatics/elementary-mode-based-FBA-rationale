@@ -340,12 +340,12 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
                                          external_compartment=external_compartment)
 
     indices_to_tag = []
-    print([reaction.id for reaction in network.reactions])
+    # print([reaction.id for reaction in network.reactions])
     if len(reactions_to_tag) > 0:
         for rid in reactions_to_tag:
             ind_to_tag = [ind for ind, reaction in enumerate(network.reactions) if reaction.id == rid]
-            print(rid)
-            print(ind_to_tag)
+            # print(rid)
+            # print(ind_to_tag)
             # indices_to_tag.append(ind_to_tag[0])
             indices_to_tag += ind_to_tag
 
@@ -360,7 +360,7 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     # Stap 2: compress network
     if print_results:
         print("\n", "Compressing network")
-    network.compress(verbose=False)  # verbose was True
+    network.compress(verbose=True)  # verbose was True
 
     # Stap 3: Ecms enumereren
     # TODO: add timer on enumerating ECMs. tic toc?

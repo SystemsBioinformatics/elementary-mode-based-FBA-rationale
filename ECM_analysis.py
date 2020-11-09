@@ -27,8 +27,8 @@ model_dir = os.path.join("models")
 LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loaded if the program runs a second time
 N_KOS = 0 # number of knockout models that will be created
 # adjust DROP_MODELS based on this.
-#DROP_MODELS = [0,12]  # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
-DROP_MODELS = [0, 2]  # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
+# The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
+DROP_MODEL_TAGS = ['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 EXTERNAL_COMPARTMENT = 'e'
 
 """START ANALYSIS"""
@@ -69,8 +69,6 @@ if model_name == "e_coli_core":
     glc_reaction.setUpperBound(-8.)
     glc_reaction.setLowerBound(-10.) #is original
     #glc_reaction.reversible = False # was True
-
-    DROP_MODELS = [0, 2] #[0, 2]  # [0]  # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 
 elif model_name == 'iAF1260b_new':
     # E. coli
@@ -121,8 +119,6 @@ elif model_name == 'MG1363_20190628':
             # make output
             intermediate_cmod.setReactionLowerBound(rid, 0.)
             #
-
-    DROP_MODELS = [0, 2, 3]
 
 elif model_name == "lplawcfs1": #plantarum model Bas
     # something goes wrong here. biomass reaction has an equal constraint. you cannot set this with python 3 cbmpy.
@@ -176,7 +172,7 @@ for rid in not_feasible_list:
 This is according to SBML language rules."""
 for rid in intermediate_cmod.getReactionIds():
     if intermediate_cmod.getReactionLowerBound(rid) < 0 and not intermediate_cmod.getReaction(rid).reversible:
-        print(rid)
+        print('Reversibility of ' + rid + ' is set to True because lower bound was negative.')
         intermediate_cmod.getReaction(rid).reversible = True
 
 cbm.doFBA(intermediate_cmod)
@@ -188,17 +184,17 @@ list_model_dicts = []
 # Create dictionary for original model
 list_model_dicts.append(
     {'model': intermediate_cmod, 'model_name': 'original_network', 'calc_efms': False, 'get_activities': True,
-     'get_relevant_efms': False})
+     'get_relevant_efms': False, 'drop_tag': 'full'})
 
 # Deletes all non active reactions (determined by seeing if the flux is lower than a tolerance)
 model_name = 'active_subnetwork'
-model_path = os.path.join(sbml_dir, model_name + ".xml")
-if os.path.exists(model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
+active_model_path = os.path.join(sbml_dir, model_name + ".xml")
+if os.path.exists(active_model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
     try:
-        intermediate_cmod_active = cbm.readSBML3FBC(model_path)
+        intermediate_cmod_active = cbm.readSBML3FBC(active_model_path)
         # intermediate_cmod_active.setNotes(str(intermediate_cmod_active.getNotes().encode(encoding='ascii', errors='ignore')))
     except:  # use version 2
-        intermediate_cmod_active = cbm.readSBML2FBA(model_path)
+        intermediate_cmod_active = cbm.readSBML2FBA(active_model_path)
         # intermediate_cmod_active.setNotes(str(intermediate_cmod_active.getNotes().encode(encoding='ascii', errors='ignore')))
 else:
     intermediate_cmod_active = delete_non_active_network(intermediate_cmod, which_zeros='flux_zero', zero_tol=1e-15,
@@ -208,32 +204,33 @@ else:
 # Create dictionary for active subnetwork
 list_model_dicts.append(
     {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': True, 'get_activities': True,
-     'get_relevant_efms': True})
+     'get_relevant_efms': True, 'drop_tag': 'active'})
 
 # Delete only reactions that are never active (based on FVA)
-model_name = 'active_subnetwork_FVA'
-model_path = os.path.join(sbml_dir, model_name + ".xml")
-if os.path.exists(model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
-    try:
-        intermediate_cmod_FVA_active = cbm.readSBML3FBC(model_path)
-        intermediate_cmod_FVA_active.setNotes(
-            intermediate_cmod_FVA_active.getNotes().encode(encoding='ascii', errors='ignore'))
-    except:  # use version 2
-        intermediate_cmod_FVA_active = cbm.readSBML2FBA(model_path)
-else:
-    intermediate_cmod_FVA_active = delete_non_active_network(intermediate_cmod, which_zeros='FVA_zero')
+if 'fva' not in DROP_MODEL_TAGS:
+    model_name = 'active_subnetwork_FVA'
+    model_path = os.path.join(sbml_dir, model_name + ".xml")
+    if os.path.exists(model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
+        try:
+            intermediate_cmod_FVA_active = cbm.readSBML3FBC(model_path)
+            intermediate_cmod_FVA_active.setNotes(
+                intermediate_cmod_FVA_active.getNotes().encode(encoding='ascii', errors='ignore'))
+        except:  # use version 2
+            intermediate_cmod_FVA_active = cbm.readSBML2FBA(model_path)
+    else:
+        intermediate_cmod_FVA_active = delete_non_active_network(intermediate_cmod, which_zeros='FVA_zero')
 
-# Create dictionary for active subnetwork based on FVA
-list_model_dicts.append(
-    {'model': intermediate_cmod_FVA_active, 'model_name': model_name, 'calc_efms': False,
-     'get_activities': True, 'get_relevant_efms': False})
+    # Create dictionary for active subnetwork based on FVA
+    list_model_dicts.append(
+        {'model': intermediate_cmod_FVA_active, 'model_name': model_name, 'calc_efms': False,
+         'get_activities': True, 'get_relevant_efms': False,  'drop_tag': 'fva'})
 
 # Optional: Create list of models with reactions that are active when certain knockouts are created
 # This is a way to create more models to try-out stuff. You can use this option by setting n_KOs > 0
 list_KO_models = create_KO_models(intermediate_cmod, n_KOs=N_KOS)
 for model_ind, model in enumerate(list_KO_models):
     list_model_dicts.append({'model': model, 'model_name': 'active_subnetwork_KO_%d' % model_ind, 'calc_efms': False,
-                             'get_activities': True, 'get_relevant_efms': False}) #was False
+                             'get_activities': True, 'get_relevant_efms': False,  'drop_tag': 'ko'}) #was False
 
 """Rebuild stoichiometric matrix for reduced models"""
 for model_dict in list_model_dicts:
@@ -281,17 +278,15 @@ for model_dict in list_model_dicts:
 list_model_dicts.append(
     {'model': intermediate_cmod, 'model_name': 'original_with_hidden_metabolites', 'calc_efms': False,
      'get_activities': True, 'hide_metabolites': hide_indices, 'get_relevant_efms': False,
-     'model_path': os.path.join(sbml_dir, "original_network.xml")})
+     'model_path': os.path.join(sbml_dir, "original_network.xml"), 'drop_tag': 'hidden'})
 
 """Create another dictionary for the active model with some metabolites hidden"""
-if model_name == '':
-    active_model_path = list_model_dicts[0]['model_path']
-    hide_indices = find_hide_indices(active_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs)
-    # TODO: adjust below !!! modelpath etc...............................................................
-    list_model_dicts.append(
-        {'model': intermediate_cmod_active, 'model_name': 'active_network_with_hidden_metabolites', 'calc_efms': False,
-         'get_activities': True, 'hide_metabolites': hide_indices, 'get_relevant_efms': False,
-         'model_path': os.path.join(sbml_dir, "original_network.xml")})
+active_hide_indices = find_hide_indices(active_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs)
+# TODO: adjust below !!! modelpath etc...............................................................
+list_model_dicts.append(
+    {'model': intermediate_cmod_active, 'model_name': 'active_network_with_hidden_metabolites', 'calc_efms': False,
+     'get_activities': True, 'hide_metabolites': active_hide_indices, 'get_relevant_efms': False,
+     'model_path': active_model_path,  'drop_tag': 'active_hidden'})
 
 # Debug?! get network and print external metabolites.
 # file_path = os.path.join(sbml_dir, 'active_subnetwork' + ".xml")
@@ -333,9 +328,8 @@ if model_name == '':
 # or only for the model with external metabolites that are ignored.
 # TODO: Make calculation stop when it takes too long, and give error message
 # For now I manually remove some models defined at top of the file
-#DROP_MODELS = [1,2,3]
 list_model_dicts_remember = list_model_dicts.copy()
-list_model_dicts = [model_dict for index, model_dict in enumerate(list_model_dicts) if index not in DROP_MODELS]
+list_model_dicts = [model_dict for model_dict in list_model_dicts if model_dict['drop_tag'] not in DROP_MODEL_TAGS]
 
 # Calculate ECMs for all models, and add it to the model dictionaries
 for model_dict in list_model_dicts:
