@@ -15,7 +15,7 @@ model_name = "e_coli_core"
 #model_name = "lplawcfs1" #plantarum model Bas # species ending with _b are boundary species. extracellular compartment
 #model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
 # denoted with 'Extra_organism'
-#model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
+model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
 # network, but something goes wrong when calculating the activities of the ECMs in the FBA solution. Supremum norm is non-zero.
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
@@ -80,6 +80,7 @@ elif model_name == 'iAF1260b_new':
     #atp_reaction.setLowerBound(.)
 
 elif model_name == 'MG1363_20190628':
+    GOEL_BOUNDS = 'basic'  # either 'basic', 'FBA', 'FBA_adjusted'
     # L. lactis MG1363
     # Read excel file with measured exchange bounds
     filepath = os.path.join(result_dir, "..", "goel_bounds.xlsx")
@@ -90,36 +91,37 @@ elif model_name == 'MG1363_20190628':
     filepath = os.path.join(result_dir, "..", "exchange_rids_basic.txt")
     exchange_rids_basic = pd.read_csv(filepath, sep='\t', index_col=0)
     exchange_rids_basic = exchange_rids_basic.astype({'lb': float, 'ub': float})
+    if GOEL_BOUNDS == 'basic':
+        for rid in exchange_rids_basic.index:
+            # print(cmod.getReactionBounds(rid))
+            intermediate_cmod.setReactionBounds(rid, exchange_rids_basic["lb"][rid], exchange_rids_basic["ub"][rid])
+            # print(intermediate_cmod.getReactionBounds(rid))
 
-    for rid in exchange_rids_basic.index:
-        print(cmod.getReactionBounds(rid))
-        intermediate_cmod.setReactionBounds(rid, exchange_rids_basic["lb"][rid], exchange_rids_basic["ub"][rid])
-        print(intermediate_cmod.getReactionBounds(rid))
+        # if using basis bounds, also set glucose lower bound open.
+        intermediate_cmod.setReactionBounds("R_EX_glc__D_e", -4., 0.)
+    elif GOEL_BOUNDS == 'FBA':
+        # Set exchange bounds to dilution rate of choice
+        # This stil doesn't work. ecmtool errors, and takes a lot of time... At least several hours.
+        for rid in goel_bounds.index:
+            if rid not in []:#["R_EX_pi_e", "R_EX_nac_e", "R_EX_o2_e", "R_EX_orn_e"]:#, "R_EX_pyr_e", "R_EX_succ_e", "R_EX_nh4_e", "R_EX_lac__L_e"]:
+                # 0.6
+                print(intermediate_cmod.getReactionBounds(rid))
+                intermediate_cmod.setReactionBounds(rid, goel_bounds['LB0.6A'][rid], goel_bounds['UB0.6A'][rid])
+                print(intermediate_cmod.getReactionBounds(rid))
+    elif GOEL_BOUNDS == 'FBA_adjusted':
+        for rid in goel_bounds_adjusted.index:
+            if rid not in []:#["R_EX_pi_e", "R_EX_nac_e", "R_EX_o2_e", "R_EX_orn_e"]:#, "R_EX_pyr_e", "R_EX_succ_e", "R_EX_nh4_e", "R_EX_lac__L_e"]:
+                # 0.6
+                print(intermediate_cmod.getReactionBounds(rid))
+                intermediate_cmod.setReactionBounds(rid, goel_bounds_adjusted['LB0.6A'][rid], goel_bounds_adjusted['UB0.6A'][rid])
+                print(intermediate_cmod.getReactionBounds(rid))
+        intermediate_cmod.setReactionUpperBound('R_EX_pnto__R_e', 0.) # make input
+        intermediate_cmod.setReactionUpperBound('R_EX_thm_e', 0.) #make input
+        for rid in ['R_EX_h2o_e', 'R_EX_h2s_e', 'R_EX_h_e']:
+            # make output
+            intermediate_cmod.setReactionLowerBound(rid, 0.)
+            #
 
-    # if using basis bounds, also set glucose lower bound open.
-    intermediate_cmod.setReactionBounds("R_EX_glc__D_e", -4., 0.)
-
-    # Set exchange bounds to dilution rate of choice
-    # This stil doesn't work. ecmtool errors, and takes a lot of time... At least several hours.
-    for rid in goel_bounds.index:
-        if rid not in []:#["R_EX_pi_e", "R_EX_nac_e", "R_EX_o2_e", "R_EX_orn_e"]:#, "R_EX_pyr_e", "R_EX_succ_e", "R_EX_nh4_e", "R_EX_lac__L_e"]:
-            # 0.6
-            print(intermediate_cmod.getReactionBounds(rid))
-            intermediate_cmod.setReactionBounds(rid, goel_bounds['LB0.6A'][rid], goel_bounds['UB0.6A'][rid])
-            print(intermediate_cmod.getReactionBounds(rid))
-        #
-    for rid in goel_bounds_adjusted.index:
-        if rid not in []:#["R_EX_pi_e", "R_EX_nac_e", "R_EX_o2_e", "R_EX_orn_e"]:#, "R_EX_pyr_e", "R_EX_succ_e", "R_EX_nh4_e", "R_EX_lac__L_e"]:
-            # 0.6
-            print(intermediate_cmod.getReactionBounds(rid))
-            intermediate_cmod.setReactionBounds(rid, goel_bounds_adjusted['LB0.6A'][rid], goel_bounds_adjusted['UB0.6A'][rid])
-            print(intermediate_cmod.getReactionBounds(rid))
-    intermediate_cmod.setReactionUpperBound('R_EX_pnto__R_e', 0.) # make input
-    intermediate_cmod.setReactionUpperBound('R_EX_thm_e', 0.) #make input
-    for rid in ['R_EX_h2o_e', 'R_EX_h2s_e', 'R_EX_h_e']:
-        # make output
-        intermediate_cmod.setReactionLowerBound(rid, 0.)
-        #
     DROP_MODELS = [0, 2, 3]
 
 elif model_name == "lplawcfs1": #plantarum model Bas
@@ -175,7 +177,7 @@ This is according to SBML language rules."""
 for rid in intermediate_cmod.getReactionIds():
     if intermediate_cmod.getReactionLowerBound(rid) < 0 and not intermediate_cmod.getReaction(rid).reversible:
         print(rid)
-        intermediate_cmod.getReaction(rid).reversible=True
+        intermediate_cmod.getReaction(rid).reversible = True
 
 cbm.doFBA(intermediate_cmod)
 cbm.doFBAMinSum(intermediate_cmod)
