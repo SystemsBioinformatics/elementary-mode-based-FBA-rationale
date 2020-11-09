@@ -1,6 +1,8 @@
 # Added by Daan
 data/
 .idea/
+info_to_be_ignored_by_github/
+info_to_be_ignored_by_github
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
