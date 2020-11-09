@@ -455,17 +455,17 @@ else:
 
 # Find some EFM that corresponds to each of the active ECMs in the hidden-network
 # for model_dict in list_model_dicts:
-#     if model_dict['get_relevant_efms'] and model_dict['get_activities']:
-#         relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
-#                                                                        model_dict['ecms_df'],
-#                                                                        infos_obj + infos_cons, model_dict['model_path'],
-#                                                                        external_compartment=EXTERNAL_COMPARTMENT)
-#         relevant_efms_df.to_csv(
-#             os.path.join(
-#                 result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
-#         full_relevant_ecms_df.to_csv(
-#             os.path.join(
-#                 result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+    if model_dict['get_relevant_efms'] and model_dict['get_activities']:
+        relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
+                                                                       model_dict['ecms_df'],
+                                                                       infos_obj + infos_cons, model_dict['model_path'],
+                                                                       external_compartment=EXTERNAL_COMPARTMENT)
+        relevant_efms_df.to_csv(
+            os.path.join(
+                result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+        full_relevant_ecms_df.to_csv(
+            os.path.join(
+                result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
 
 """ problem solving """
 # print active ECMs
