@@ -25,11 +25,12 @@ sbml_dir = os.path.join(os.getcwd(), "data", model_name + "_2", 'models', 'sbml'
 result_dir = os.path.join(os.getcwd(), "data", model_name + "_2", "EFM_yield_analysis")
 model_dir = os.path.join("models")
 LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loaded if the program runs a second time
-N_KOS = 0 # number of knockout models that will be created
+N_KOS = 0  # number of knockout models that will be created
 # adjust DROP_MODELS based on this.
 # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 DROP_MODEL_TAGS = ['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
-EXTERNAL_COMPARTMENT = 'e'
+USE_EXTERNAL_COMPARTMENT = None
+ONLY_RAYS = True
 
 """START ANALYSIS"""
 """Create folders for storing the results"""
@@ -125,7 +126,8 @@ elif model_name == "lplawcfs1": #plantarum model Bas
     # This causes errors later on. upper and lower bound are None, equal is 0.0, then reaction is 'infeasible'.
     # you cannot change the equal bound or remove it to set a lower or upper bound.
     intermediate_cmod.createObjectiveFunction('R_biomass_LPL60')
-    EXTERNAL_COMPARTMENT = 'Extern_organism'
+    # USE_EXTERNAL_COMPARTMENT = 'Extern_organism'
+    USE_EXTERNAL_COMPARTMENT = None
 
 elif model_name == "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01":
     for rid in intermediate_cmod.getReactionIds(): #"R_EX_"):
@@ -203,7 +205,7 @@ else:
 
 # Create dictionary for active subnetwork
 list_model_dicts.append(
-    {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': True, 'get_activities': True,
+    {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': False, 'get_activities': True,
      'get_relevant_efms': True, 'drop_tag': 'active'})
 
 # Delete only reactions that are never active (based on FVA)
@@ -266,14 +268,16 @@ infos_obj, infos_cons = get_info_objectives_constraints(nzrc_dictionaries, inter
 # We only have to focus on conversions of metabolites that are somehow active in a constraint
 relevant_metabs = [info_dict['ext_metab'] for info_dict in infos_obj + infos_cons]
 # The following finds all indices of external metabolites that can be ignored in the conversion analysis
-hide_indices = find_hide_indices(full_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs)
+hide_indices = find_hide_indices(full_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs,
+                                 use_external_compartment=USE_EXTERNAL_COMPARTMENT)
 # By default no metabolites are hidden
 for model_dict in list_model_dicts:
     model_dict['hide_metabolites'] = []
 
 # try out with only glucose and objective
-#relevant_metabs = ['objective', 'M_glc__D_e']
-#hide_indices = find_hide_indices(full_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs)
+# relevant_metabs = ['objective', 'M_glc__D_e']
+# hide_indices = find_hide_indices(full_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs,
+#                                     use_external_compartment = USE_EXTERNAL_COMPARTMENT)
 """Create another dictionary for a model in which some metabolites are hidden"""
 list_model_dicts.append(
     {'model': intermediate_cmod, 'model_name': 'original_with_hidden_metabolites', 'calc_efms': False,
@@ -281,7 +285,8 @@ list_model_dicts.append(
      'model_path': os.path.join(sbml_dir, "original_network.xml"), 'drop_tag': 'hidden'})
 
 """Create another dictionary for the active model with some metabolites hidden"""
-active_hide_indices = find_hide_indices(active_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs)
+active_hide_indices = find_hide_indices(active_model_path, to_be_tagged=reactions_to_tag, focus_metabs=relevant_metabs,
+                                        use_external_compartment=USE_EXTERNAL_COMPARTMENT)
 # TODO: adjust below !!! modelpath etc...............................................................
 list_model_dicts.append(
     {'model': intermediate_cmod_active, 'model_name': 'active_network_with_hidden_metabolites', 'calc_efms': False,
@@ -336,9 +341,9 @@ for model_dict in list_model_dicts:
     ecms_df, full_network_ecm, efms_df, ecms_from_efms = get_ecm_df(result_dir, model_dict['model_path'], infos_obj,
                                                                     hide_indices=model_dict['hide_metabolites'],
                                                                     to_be_tagged=reactions_to_tag,
-                                                                    print_results=True,
+                                                                    print_results=False, only_rays=ONLY_RAYS,
                                                                     get_EFMs=model_dict['calc_efms'],
-                                                                    external_compartment=EXTERNAL_COMPARTMENT)
+                                                                    use_external_compartment=USE_EXTERNAL_COMPARTMENT)
     model_dict.update(
         {'ecms_df': ecms_df, 'network': full_network_ecm, 'efms_df': efms_df, 'ecms_from_efms': ecms_from_efms})
 
@@ -455,7 +460,7 @@ else:
         relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
                                                                        model_dict['ecms_df'],
                                                                        infos_obj + infos_cons, model_dict['model_path'],
-                                                                       external_compartment=EXTERNAL_COMPARTMENT)
+                                                                       use_external_compartment=USE_EXTERNAL_COMPARTMENT)
         relevant_efms_df.to_csv(
             os.path.join(
                 result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)

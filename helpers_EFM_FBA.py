@@ -299,7 +299,7 @@ def get_nzrc(cmod):
     return nzrc_dictionaries, n_objectives
 
 
-def get_network_class(file_path, reactions_to_tag=[]):
+def get_network_class(file_path, reactions_to_tag=[], use_external_compartment=None):
     """
     :return network: network class
     :param file_path: string
@@ -308,7 +308,8 @@ def get_network_class(file_path, reactions_to_tag=[]):
             Strings with reaction IDs that should be tagged with a virtual metabolite
     """
     # Stap 1: Function from ECMtool that builds network class
-    network = extract_sbml_stoichiometry(file_path, determine_inputs_outputs=True)
+    network = extract_sbml_stoichiometry(file_path, determine_inputs_outputs=True,
+                                         use_external_compartment=use_external_compartment)
 
     # Find indices of reactions that should be tagged
     indices_to_tag = []
@@ -322,7 +323,8 @@ def get_network_class(file_path, reactions_to_tag=[]):
     return network
 
 
-def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[], external_compartment='e'):
+def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[], use_external_compartment=None,
+              only_rays=False):
     """
     Calculates ECMs using ECMtool
     :return ecms: np.array
@@ -332,13 +334,12 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     :param reactions_to_tag: list with strings
             List with reaction-IDs of reactions that need to be tagged
     :param print_results: Boolean
-    :param external_compartment='e' default # eunice edit
+    :param use_external_compartment=None default # if a string is given, this is used to detect external metabolites
     :param hide_metabs: indices of metabolites that should be ignored
     """
     # Stap 1: netwerk bouwen
     network = extract_sbml_stoichiometry(file_path, determine_inputs_outputs=True,
-                                         external_compartment=external_compartment)
-
+                                         use_external_compartment=use_external_compartment)
     indices_to_tag = []
     # print([reaction.id for reaction in network.reactions])
     if len(reactions_to_tag) > 0:
@@ -360,7 +361,7 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
     # Stap 2: compress network
     if print_results:
         print("\n", "Compressing network")
-    network.compress(verbose=True)  # verbose was True
+    network.compress(verbose=True, cycle_removal=False)  # verbose was True
 
     # Stap 3: Ecms enumereren
     # TODO: add timer on enumerating ECMs. tic toc?
@@ -368,7 +369,7 @@ def calc_ECMs(file_path, reactions_to_tag=[], print_results=False, hide_metabs=[
         print("\n", "Enumerating ECMs")
     cone = network.uncompress(
         get_conversion_cone(network.N, network.external_metabolite_indices(), network.reversible_reaction_indices(),
-                            network.input_metabolite_indices(), network.output_metabolite_indices(), only_rays=False,
+                            network.input_metabolite_indices(), network.output_metabolite_indices(), only_rays=only_rays,
                             verbose=True))  # verbose was True
 
     if print_results:
@@ -644,7 +645,7 @@ def calc_EFMs(network, result_dir, verbose=True):
     # Add an exchange reaction for external metabolites, otherwise no steady-state can be obtained
     for ind_metab, metab in enumerate(network.metabolites):
         if metab.is_external:
-            # Determine reversibilitie of the exchange reaction, based on information if the metab
+            # Determine reversibilities of the exchange reaction, based on information if the metab
             # is an input, output or both
             reversible = 1 if metab.direction == 'both' else 0
             # Create new column (reaction) in the stoichiometric matrix
@@ -652,6 +653,18 @@ def calc_EFMs(network, result_dir, verbose=True):
             col[ind_metab, 0] = -1 if metab.direction == 'output' else 1
             stoich_matrix = np.append(stoich_matrix, col, axis=1)
             reversibilities.append(reversible)
+        #     if metab.is_external:
+        #         reversible = 0
+        #         if metab.direction in ['input','both']:
+        #             col = to_fractions(np.zeros(shape=(stoich_matrix.shape[0], 1)))
+        #             col[ind_metab, 0] = 1
+        #             stoich_matrix = np.append(stoich_matrix, col, axis=1)
+        #             reversibilities.append(reversible)
+        #         if metab.direction in ['output', 'both']:
+        #             col = to_fractions(np.zeros(shape=(stoich_matrix.shape[0], 1)))
+        #             col[ind_metab, 0] = -1
+        #             stoich_matrix = np.append(stoich_matrix, col, axis=1)
+        #             reversibilities.append(reversible)
 
     stoich_matrix = stoich_matrix.astype(dtype=float)  # Matlab doesn't deal with the python Fractions
 
@@ -1085,7 +1098,7 @@ def plot_different_approaches_one_figure(list_model_dicts, infos_obj, infos_cons
         plt.savefig(os.path.join(os.getcwd(), "various_approaches.png"))  # , dpi=600)
 
 
-def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[]):
+def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[], use_external_compartment=None):
     """
     :param model_path: string
     :param to_be_tagged: list of reaction-IDs
@@ -1098,7 +1111,8 @@ def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[]):
     if len(focus_metabs):
         # ECMtool works with a network class object. To find the indices of the metabolites that can be ignored, we need
         # this object already
-        network = get_network_class(model_path, reactions_to_tag=to_be_tagged)
+        network = get_network_class(model_path, reactions_to_tag=to_be_tagged,
+                                    use_external_compartment=use_external_compartment)
         for metab_index, metab in enumerate(network.metabolites):
             if metab.is_external:  # Internal metabolites are ignored by definition of conversion modes
                 if metab.id not in focus_metabs:
@@ -1108,7 +1122,7 @@ def find_hide_indices(model_path, to_be_tagged=[], focus_metabs=[]):
 
 
 def get_ecm_df(result_dir, model_path, infos_obj, to_be_tagged=[], print_results=False, hide_indices=[],
-               get_EFMs=True, external_compartment='e'):
+               get_EFMs=True, use_external_compartment=None, only_rays=False):
     """
     Gets cost table for each objective function.
     :param result_dir: string
@@ -1137,7 +1151,7 @@ def get_ecm_df(result_dir, model_path, infos_obj, to_be_tagged=[], print_results
     """
     ecms_matrix, full_network_ecm = calc_ECMs(model_path, reactions_to_tag=to_be_tagged,
                                               print_results=print_results, hide_metabs=hide_indices,
-                                              external_compartment=external_compartment)
+                                              use_external_compartment=use_external_compartment, only_rays=only_rays)
     # print(ecms_matrix)
 
     # Normalize the ECMs. We first normalize all ECMs that produce the objective to produce one objective, after that
@@ -1152,9 +1166,11 @@ def get_ecm_df(result_dir, model_path, infos_obj, to_be_tagged=[], print_results
     # Calculate EFMs if this is asked for. Infeasible for larger models.
     if get_EFMs:
         print("Calculating EFMs")
-        efms_df = calc_EFMs(full_network_ecm, result_dir)
+        full_network = copy.deepcopy(full_network_ecm)
+        full_network.split_reversible()
+        efms_df = calc_EFMs(full_network, result_dir)
         # Convert the EFMs to ECMs
-        ecms_from_efms = convert_EFMs_to_ECMs(efms_df, full_network_ecm, infos_obj)
+        ecms_from_efms = convert_EFMs_to_ECMs(efms_df, full_network, infos_obj)
     else:
         ecms_from_efms = None
         efms_df = None
@@ -1396,7 +1412,7 @@ def convert_EFMs_to_ECMs(efms_df, network, infos_obj, verbose=True):
     ecms_df = pd.DataFrame(ext_ecms_array, index=metab_ids)
     if verbose:
         print('Found ' + str(ext_ecms_array.shape[1]) + ' unique conversions generated by the ' + str(
-            efms_df.shape[0]) + ' EFMs')
+            n_EFMs) + ' EFMs')
     return ecms_df
 
 
@@ -1667,10 +1683,10 @@ def delete_bounds_from_model(cmod):
     return cmod_wo_bounds
 
 
-def find_associated_efms(cmod, table_cons_df, ecms_df, infos_obj_cons, model_path,external_compartment='e'):
+def find_associated_efms(cmod, table_cons_df, ecms_df, infos_obj_cons, model_path, use_external_compartment=None):
     # First delete old bounds from the model
     network = extract_sbml_stoichiometry(model_path, determine_inputs_outputs=True,
-                                                       external_compartment=external_compartment)
+                                         use_external_compartment=use_external_compartment)
     cmod_wo_bounds = delete_bounds_from_model(cmod)
     all_bounds = cmod_wo_bounds.getAllFluxBounds()
     relevant_ecms_df = ecms_df.iloc[np.where(np.count_nonzero(ecms_df.values, axis=1) > 0)[0], :]
