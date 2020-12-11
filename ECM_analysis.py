@@ -1,4 +1,5 @@
 import pickle
+import itertools
 
 from helpers_EFM_FBA import *
 
@@ -15,7 +16,7 @@ model_name = "e_coli_core"
 #model_name = "lplawcfs1" #plantarum model Bas # species ending with _b are boundary species. extracellular compartment
 #model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
 # denoted with 'Extra_organism'
-model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
+#model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
 # network, but something goes wrong when calculating the activities of the ECMs in the FBA solution. Supremum norm is non-zero.
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
@@ -28,9 +29,10 @@ LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loade
 N_KOS = 0  # number of knockout models that will be created
 # adjust DROP_MODELS based on this.
 # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
-DROP_MODEL_TAGS = ['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
+DROP_MODEL_TAGS = [] #['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 USE_EXTERNAL_COMPARTMENT = None
-ONLY_RAYS = True
+ONLY_RAYS = True # True or False
+SAVE_result = False # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
 
 """START ANALYSIS"""
 """Create folders for storing the results"""
@@ -55,21 +57,46 @@ intermediate_cmod = cmod.clone()
 if model_name == "e_coli_core":
     # E. Coli Core specific adaptations
     # Set own constraints (no constraint on ATP, constraint on O2 though)
-    atp_reaction = intermediate_cmod.getReaction('R_ATPM')
-    # atp_reaction.setLowerBound(0.) ## eunice_edit 0.
-    oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
-    oxygen_reaction.setLowerBound(-15.)
-    acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
-    #acetate_reaction.setLowerBound(-5.) # This works with ub=1000; reaction set reversible.
-    #acetate_reaction.setUpperBound(-1.)
-    #acetate_reaction.setUpperBound(0.) # This works with new version network.py with lb=-5.; reaction set reversible.
-    #acetate_reaction.setLowerBound(2.) # This works with ub=5; reaction set not reversible
-    #acetate_reaction.setUpperBound(5.) # This works with lb=2; reaction set not reversible
-    acetate_reaction.reversible=True
+    ECOLI_BOUNDS = 'with_atpm' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
     glc_reaction = intermediate_cmod.getReaction('R_EX_glc__D_e')
     glc_reaction.setUpperBound(-8.)
-    glc_reaction.setLowerBound(-10.) #is original
-    #glc_reaction.reversible = False # was True
+    glc_reaction.setLowerBound(-10.)  # is original
+    # glc_reaction.reversible = False # was True
+
+    if ECOLI_BOUNDS == 'wo_atpm_one_constr':
+        atp_reaction = intermediate_cmod.getReaction('R_ATPM')
+        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
+        acetate_reaction.reversible = True
+    elif ECOLI_BOUNDS == 'wo_atpm':
+        atp_reaction = intermediate_cmod.getReaction('R_ATPM')
+        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
+        # Set oxygen lowerbound to -14, -13 to restrict the oxygen uptake and change active ECMs
+        oxygen_reaction.setLowerBound(-15.)  # -15.
+        acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
+        acetate_reaction.reversible = True
+    elif ECOLI_BOUNDS == 'with_atpm':
+        atp_reaction = intermediate_cmod.getReaction('R_ATPM')
+        # atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
+        oxygen_reaction.setLowerBound(-15.)  # -15.
+        acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
+        acetate_reaction.reversible = True
+    elif ECOLI_BOUNDS == 'forced_etoh':
+        atp_reaction = intermediate_cmod.getReaction('R_ATPM')
+        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
+        oxygen_reaction.setLowerBound(-15.)  # -15.
+        acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
+        # acetate_reaction.setLowerBound(-5.) # This works with ub=1000; reaction set reversible.
+        # acetate_reaction.setUpperBound(-1.)
+        # acetate_reaction.setUpperBound(0.) # This works with new version network.py with lb=-5.; reaction set reversible.
+        #acetate_reaction.setLowerBound(2.) # This works with ub=5; reaction set not reversible
+        #acetate_reaction.setUpperBound(5.) # This works with lb=2; reaction set not reversible
+        acetate_reaction.reversible = True
+        ethanol_reaction = intermediate_cmod.getReaction("R_EX_etoh_e")
+        ethanol_reaction.setLowerBound(2)
 
 elif model_name == 'iAF1260b_new':
     # E. coli
@@ -79,7 +106,7 @@ elif model_name == 'iAF1260b_new':
     #atp_reaction.setLowerBound(.)
 
 elif model_name == 'MG1363_20190628':
-    GOEL_BOUNDS = 'basic'  # either 'basic', 'FBA', 'FBA_adjusted'
+    GOEL_BOUNDS = 'FBA_adjusted'  # either 'basic', 'FBA', 'FBA_adjusted'
     # L. lactis MG1363
     # Read excel file with measured exchange bounds
     filepath = os.path.join(result_dir, "..", "goel_bounds.xlsx")
@@ -189,8 +216,8 @@ list_model_dicts.append(
      'get_relevant_efms': False, 'drop_tag': 'full'})
 
 # Deletes all non active reactions (determined by seeing if the flux is lower than a tolerance)
-model_name = 'active_subnetwork'
-active_model_path = os.path.join(sbml_dir, model_name + ".xml")
+sub_model_name = 'active_subnetwork'
+active_model_path = os.path.join(sbml_dir, sub_model_name + ".xml")
 if os.path.exists(active_model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
     try:
         intermediate_cmod_active = cbm.readSBML3FBC(active_model_path)
@@ -205,13 +232,13 @@ else:
 
 # Create dictionary for active subnetwork
 list_model_dicts.append(
-    {'model': intermediate_cmod_active, 'model_name': model_name, 'calc_efms': False, 'get_activities': True,
-     'get_relevant_efms': True, 'drop_tag': 'active'})
+    {'model': intermediate_cmod_active, 'model_name': sub_model_name, 'calc_efms': False, 'get_activities': True,
+     'get_relevant_efms': False, 'drop_tag': 'active'})
 
 # Delete only reactions that are never active (based on FVA)
 if 'fva' not in DROP_MODEL_TAGS:
-    model_name = 'active_subnetwork_FVA'
-    model_path = os.path.join(sbml_dir, model_name + ".xml")
+    sub_model_name = 'active_subnetwork_FVA'
+    model_path = os.path.join(sbml_dir, sub_model_name + ".xml")
     if os.path.exists(model_path) and LOAD_IF_AVAILABLE:  # Checks if this model was already made
         try:
             intermediate_cmod_FVA_active = cbm.readSBML3FBC(model_path)
@@ -224,15 +251,15 @@ if 'fva' not in DROP_MODEL_TAGS:
 
     # Create dictionary for active subnetwork based on FVA
     list_model_dicts.append(
-        {'model': intermediate_cmod_FVA_active, 'model_name': model_name, 'calc_efms': False,
+        {'model': intermediate_cmod_FVA_active, 'model_name': sub_model_name, 'calc_efms': False,
          'get_activities': True, 'get_relevant_efms': False,  'drop_tag': 'fva'})
 
 # Optional: Create list of models with reactions that are active when certain knockouts are created
 # This is a way to create more models to try-out stuff. You can use this option by setting n_KOs > 0
 list_KO_models = create_KO_models(intermediate_cmod, n_KOs=N_KOS)
 for model_ind, model in enumerate(list_KO_models):
-    list_model_dicts.append({'model': model, 'model_name': 'active_subnetwork_KO_%d' % model_ind, 'calc_efms': False,
-                             'get_activities': True, 'get_relevant_efms': False,  'drop_tag': 'ko'}) #was False
+    list_model_dicts.append({'model': model, 'model_name': 'active_subnetwork_KO_%d' % model_ind, 'calc_efms': True,
+                             'get_activities': True, 'get_relevant_efms': True,  'drop_tag': 'ko'}) #was False
 
 """Rebuild stoichiometric matrix for reduced models"""
 for model_dict in list_model_dicts:
@@ -281,7 +308,7 @@ for model_dict in list_model_dicts:
 """Create another dictionary for a model in which some metabolites are hidden"""
 list_model_dicts.append(
     {'model': intermediate_cmod, 'model_name': 'original_with_hidden_metabolites', 'calc_efms': False,
-     'get_activities': True, 'hide_metabolites': hide_indices, 'get_relevant_efms': False,
+     'get_activities': True, 'hide_metabolites': hide_indices, 'get_relevant_efms': True,
      'model_path': os.path.join(sbml_dir, "original_network.xml"), 'drop_tag': 'hidden'})
 
 """Create another dictionary for the active model with some metabolites hidden"""
@@ -289,8 +316,8 @@ active_hide_indices = find_hide_indices(active_model_path, to_be_tagged=reaction
                                         use_external_compartment=USE_EXTERNAL_COMPARTMENT)
 # TODO: adjust below !!! modelpath etc...............................................................
 list_model_dicts.append(
-    {'model': intermediate_cmod_active, 'model_name': 'active_network_with_hidden_metabolites', 'calc_efms': False,
-     'get_activities': True, 'hide_metabolites': active_hide_indices, 'get_relevant_efms': False,
+    {'model': intermediate_cmod_active, 'model_name': 'active_network_with_hidden_metabolites', 'calc_efms': False, #False
+     'get_activities': True, 'hide_metabolites': active_hide_indices, 'get_relevant_efms': True,
      'model_path': active_model_path,  'drop_tag': 'active_hidden'})
 
 # Debug?! get network and print external metabolites.
@@ -384,25 +411,25 @@ for model_dict in list_model_dicts:
 
 """Save the data in list_model_dicts. Also save important parameters of this session. Especially when needed for plotting."""
 # Save list_model_dicts to file. pickle? To be able to replot/revisit the calculations.
+if SAVE_result:
+    # Store data
+    # with current data_time in name ? then it cannot be overwritten
+    import datetime
+    # TODO: Remove these print-statements or add annotation
+    now = datetime.datetime.now()
+    print("Current date and time : ")
+    print(now.strftime("%Y-%m-%d %H:%M:%S"))
+    print(now.strftime("%Y%m%d_%H%M%S"))
 
-# Store data
-# with current data_time in name ? then it cannot be overwritten
-import datetime
-# TODO: Remove these print-statements or add annotation
-now = datetime.datetime.now()
-print("Current date and time : ")
-print(now.strftime("%Y-%m-%d %H:%M:%S"))
-print(now.strftime("%Y%m%d_%H%M%S"))
+    filename = 'list_model_dicts' + now.strftime("_%Y%m%d_%H%M%S") + '.pickle'
+    with open(os.path.join(result_dir, filename), 'wb') as handle:
+        pickle.dump(list_model_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-filename = 'list_model_dicts' + now.strftime("_%Y%m%d_%H%M%S") + '.pickle'
-with open(os.path.join(result_dir, filename), 'wb') as handle:
-    pickle.dump(list_model_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-# Load data
-# Check specific date_time !!
-# filename = 'list_model_dicts_20201006_145107.pickle'
-# with open(os.path.join(result_dir, '..', '..', 'e_coli_core_2', 'EFM_yield_analysis', filename), 'rb') as handle:
-#    list_model_dicts = pickle.load(handle)
+    # Load data
+    # Check specific date_time !!
+    # filename = 'list_model_dicts_20201006_145107.pickle'
+    # with open(os.path.join(result_dir, '..', '..', 'e_coli_core_2', 'EFM_yield_analysis', filename), 'rb') as handle:
+    #    list_model_dicts = pickle.load(handle)
 
 """Plot these costs"""
 # We need the objective value to scale the axes of our plots
@@ -410,31 +437,48 @@ objective_val = intermediate_cmod.getObjFuncValue()
 # We make 2-D cost plots only (3-D is too confusing). Since each constrained metabolite brings costs, each metabolite
 # needs to be plotted on some axes. We thus make ceil(n_cons/2) figures
 constrained_ext_metabs = [cons_dict['ext_metab'] for cons_dict in list_model_dicts[0]['infos_cons']]
-for ind in range(0, len(constrained_ext_metabs), 2):
+if len(constrained_ext_metabs) > 1:
+    if model_name == "e_coli_core":
+        # all possible combinations of constraints
+        cons_ID_combi_list = list(itertools.combinations(constrained_ext_metabs, 2))
+    else:
+        cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
+else:
+    cons_ID_combi_list = None
+
+if 'MG1363' in model_name:
+    cons_ID_combi_list += [['M_asp__L_e', 'M_asn__L_e']]
+
+if cons_ID_combi_list:
+    for cons_ID_combi in cons_ID_combi_list:
+        # Plot the results of the different models (with different (sub)networks) in one plot
+        plot_different_approaches_one_figure(list_model_dicts, infos_obj,  # list_model_dicts_remember[0]['infos_obj'],
+                                             infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
+                                             obj_val=objective_val,
+                                             result_dir=result_dir, cons_IDs=cons_ID_combi)
+else:
+    #for ind in range(0, len(constrained_ext_metabs), 2):
     # print(ind)
     # Select constraints that will be plotted in this figure
     cons_for_fig = constrained_ext_metabs[ind:max(ind + 2, len(constrained_ext_metabs))]
     # Plot the results of the different models (with different (sub)networks) in one plot
     plot_different_approaches_one_figure(list_model_dicts, infos_obj,  # list_model_dicts_remember[0]['infos_obj'],
-                                         infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
-                                         obj_val=objective_val,
-                                         result_dir=result_dir, cons_IDs=cons_for_fig)
+                                             infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
+                                             obj_val=objective_val,
+                                             result_dir=result_dir) #, cons_IDs=cons_for_fig)
 
 # Now make for each approach for which we calculated the activities of the ECMs a different plot in which the usage of
 # the ECMs is shown with vectors.
-if len(constrained_ext_metabs) > 1:
-    cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
-else:
-    cons_ID_combi_list = None
-
 if cons_ID_combi_list:
     for model_dict in list_model_dicts:
         if model_dict['get_activities']:
             print('Plotting the cost vectors including usage for model %s' % model_dict['model_name'])
             for cons_ID_combi in cons_ID_combi_list:
+                print(cons_ID_combi)
                 plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                            cons_IDs=cons_ID_combi, obj_val=objective_val,
                            show_active=True, result_dir=result_dir)
+                plot_costs_ECMs(model_dict, infos_cons, cons_IDs=cons_ID_combi, result_dir=result_dir)
 else:
     for model_dict in list_model_dicts:
         if model_dict['get_activities']:
@@ -442,20 +486,15 @@ else:
             plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                        cons_IDs=constrained_ext_metabs, obj_val=objective_val,
                        show_active=True, result_dir=result_dir)
-#
-# for model_dict in list_model_dicts:
-#     if model_dict['get_activities']:
-#         print('Plotting the cost vectors including usage for model %s' % model_dict['model_name'])
-#         plot_costs(model_dict, infos_obj, infos_cons, #model_dict['infos_obj'], model_dict['infos_cons'],
-#                    cons_IDs=constrained_ext_metabs, obj_val=objective_val,
-#                    show_active=True, result_dir=result_dir)
+            plot_costs_ECMs(model_dict, infos_cons, cons_IDs=constrained_ext_metabs, result_dir=result_dir)
 
+"""Find corresponding EFM(s) for active ECM(s)"""
 # TODO: Make a function that finds an EFM corresponding to an ECM
 # TODO: Apply this function to the resulting ECMs for the hidden metabolites, to get a minimal network needed for these constraints
 # TODO: Apply this function (if feasible) for all ECMs, to get a minimal FBA-network
 
 # Find some EFM that corresponds to each of the active ECMs in the hidden-network
-# for model_dict in list_model_dicts:
+for model_dict in list_model_dicts:
     if model_dict['get_relevant_efms'] and model_dict['get_activities']:
         relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
                                                                        model_dict['ecms_df'],
@@ -468,17 +507,26 @@ else:
             os.path.join(
                 result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
 
-""" problem solving """
-# print active ECMs
-# for model_dict in list_model_dicts:
-#     print('Model =', model_dict['model_name'])
-#     print('Activity per ECM for objective(s)')
-#     print(model_dict['table_obj_df'][model_dict['table_obj_df']['active']!=0.])
-#     print('Activity per ECM for the active constraint(s)')
-#     print(model_dict['table_cons_df'][model_dict['table_cons_df']['active']!=0.])
-#     print('Glucose flux:', sum(model_dict['table_cons_df']['active']*model_dict['table_cons_df']['M_glc__D_e']))
-#     print('Oxygen flux:', sum(model_dict['table_cons_df']['active']*model_dict['table_cons_df']['M_o2_e']))
-#     print()
-#     print('Active ECMs and used metabolites')
-#     print(get_active_ecms(model_dict))
-#     print()
+# Todo: plot the EFMs on a map of the metabolic network - or overview/lumped metabolic network
+# Idea: select reactions for the map based on the active reactions in the EFMs.
+# Lump reactions and model if needed for visualization. <- still to be developed
+# Create groups of reactions based on EFMs, if in linear pathway add a lumped reaction to model and to group and remove
+# reactions that are replaced with the lumped variant.
+# Color based on activity (in case of 1 EFM)
+# or heatmap of EFMs with activity?
+
+
+
+"""Problem solving"""
+for model_dict in list_model_dicts:
+    print('Model =', model_dict['model_name'])
+    print('Activity per ECM for objective(s)')
+    print(model_dict['table_obj_df'][model_dict['table_obj_df']['active']!=0.])
+    print('Activity per ECM for the active constraint(s)')
+    print(model_dict['table_cons_df'][model_dict['table_cons_df']['active']!=0.])
+    #print('Glucose flux:', sum(model_dict['table_cons_df']['active']*model_dict['table_cons_df']['M_glc__D_e']))
+    #print('Oxygen flux:', sum(model_dict['table_cons_df']['active']*model_dict['table_cons_df']['M_o2_e']))
+    print()
+    print('Active ECMs and used metabolites')
+    print(get_active_ecms(model_dict))
+    print()
