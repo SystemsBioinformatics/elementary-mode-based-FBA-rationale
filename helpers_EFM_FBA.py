@@ -1761,24 +1761,50 @@ def delete_bounds_from_model(cmod):
     return cmod_wo_bounds
 
 
-def find_associated_efms(cmod, table_cons_df, ecms_df, infos_obj_cons, model_path, use_external_compartment=None):
+def find_associated_efms(cmod, table_cons_df, ecms_df, infos_obj_cons, model_path, use_external_compartment=None,
+                         only_relevant_ECMs=True):
+    """
+    :param cmod: cbmpy.CBModel
+    :param table_cons_df: pandas.Dataframe
+            Dataframe with all the fluxes through all constraints for each ECM, and a column 'active' that
+            indicates the activity of each ECM in the FBA solution.
+    :param ecms_df: Pandas.Dataframe
+            A cost_df with ECMs as columns and as rows the metabolites
+    :param infos_obj_cons: list of dictionaries
+            List of dictionaries with information on all active constraints and on all active objectives
+            (including secondary objectives such as lower bounds that have to be met.
+    :param model_path
+    :param use_external_compartment: string
+            If given, defines the way an external compartment is notated in the model (cmod).
+    :param only_relevant_ECMs: Boolean
+            If true only the active ECMs are used to find corresponding EFMs and full ECMs
+            If false all ECMs are used.
+    :return relevant_efms_df: pandas.Dataframe
+            Matrix with as columns the reaction IDs and as index ECM IDs
+    :return full_relevant_ecms_df: pandas.Dataframe
+            Matrix with as columns the external metabolite IDs and as index ECM IDs
+    """
+    ZERO_TOLERANCE = 10 ** -6 # 1e-10
+
     # First delete old bounds from the model
     network = extract_sbml_stoichiometry(model_path, determine_inputs_outputs=True,
                                          use_external_compartment=use_external_compartment)
     cmod_wo_bounds = delete_bounds_from_model(cmod)
     all_bounds = cmod_wo_bounds.getAllFluxBounds()
-    relevant_ecms_df = ecms_df.iloc[np.where(np.count_nonzero(ecms_df.values, axis=1) > 0)[0], :]
+    if not only_relevant_ECMs: #use all ECMs
+        relevant_ecms_df = ecms_df.iloc[np.where(np.count_nonzero(ecms_df.values, axis=1) > 0)[0], :]
+    else: #use only the active ECMs
+        active_ECMs = table_cons_df[table_cons_df['active'] != 0.]['orig_ECM_number'].values
+        relevant_ecms_df = ecms_df.iloc[np.where(np.count_nonzero(ecms_df.values, axis=1) > 0)[0], active_ECMs]
     all_rids = cmod_wo_bounds.getReactionIds()
-    relevant_efms_vals = np.zeros((ecms_df.shape[1], len(all_rids)))
+    relevant_efms_vals = np.zeros((relevant_ecms_df.shape[1], len(all_rids)))
     external_metabs = [ind for ind, metab in enumerate(network.metabolites) if metab.is_external]
-    full_ecms_vals = np.zeros((ecms_df.shape[1], len(external_metabs)))
+    full_ecms_vals = np.zeros((relevant_ecms_df.shape[1], len(external_metabs)))
 
     # Then loop over the different ECMs of interest
     for ecm_ind in range(relevant_ecms_df.shape[1]):
         ecm = relevant_ecms_df.iloc[:, ecm_ind]
         for metab_key in ecm.keys():
-            # TODO: this doesn't work if this metabolite is not in the infos_obj_cons list. list index out of range error
-            # Solution: ignore this metabolite?
             info_metab = [dictionary for dictionary in infos_obj_cons if dictionary['ext_metab'] == metab_key][0]
             rid = info_metab['rid']
             metab_prod = float(ecm[metab_key])
@@ -1804,16 +1830,22 @@ def find_associated_efms(cmod, table_cons_df, ecms_df, infos_obj_cons, model_pat
         # Check if internal metabolites are indeed (close to) zero. If so, throw them away before doing the LP, because they
         # will only lead to redundancy in the LP
         internal_inds = [ind for ind, metab in enumerate(network.metabolites) if not metab.is_external]
-        if np.max(np.abs(corr_conversion[internal_inds])) > 1e-10:
+        if np.max(np.abs(corr_conversion[internal_inds])) > ZERO_TOLERANCE:
+            print(np.max(np.abs(corr_conversion[internal_inds])))
             raise ValueError('Warning: some internal metabolites seem not to be in steady state in the FBA solution')
 
         clean_conversion = np.delete(corr_conversion, internal_inds)
         print(ecm_ind)
         full_ecms_vals[ecm_ind, :] = clean_conversion
 
-    relevant_efms_df = pd.DataFrame(relevant_efms_vals, columns=all_rids)
-    external_metab_ids = [network.metabolites[ind].id for ind in external_metabs]
-    full_relevant_ecms_df = pd.DataFrame(full_ecms_vals, columns=external_metab_ids)
+    if not only_relevant_ECMs:
+        relevant_efms_df = pd.DataFrame(relevant_efms_vals, columns=all_rids, index=ecms_df.index)
+        external_metab_ids = [network.metabolites[ind].id for ind in external_metabs]
+        full_relevant_ecms_df = pd.DataFrame(full_ecms_vals, columns=external_metab_ids, index=ecms_df.index)
+    else: # give index to indicate the corresponding ECM number
+        relevant_efms_df = pd.DataFrame(relevant_efms_vals, columns=all_rids, index=active_ECMs)
+        external_metab_ids = [network.metabolites[ind].id for ind in external_metabs]
+        full_relevant_ecms_df = pd.DataFrame(full_ecms_vals, columns=external_metab_ids, index=active_ECMs)
     return relevant_efms_df, full_relevant_ecms_df
 
 

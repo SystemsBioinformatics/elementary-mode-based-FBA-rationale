@@ -16,7 +16,7 @@ model_name = "e_coli_core"
 #model_name = "lplawcfs1" #plantarum model Bas # species ending with _b are boundary species. extracellular compartment
 #model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
 # denoted with 'Extra_organism'
-#model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
+model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
 # network, but something goes wrong when calculating the activities of the ECMs in the FBA solution. Supremum norm is non-zero.
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
@@ -29,7 +29,7 @@ LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loade
 N_KOS = 0  # number of knockout models that will be created
 # adjust DROP_MODELS based on this.
 # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
-DROP_MODEL_TAGS = [] #['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
+DROP_MODEL_TAGS = ['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 USE_EXTERNAL_COMPARTMENT = None
 ONLY_RAYS = True # True or False
 SAVE_result = False # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
@@ -447,7 +447,7 @@ else:
     cons_ID_combi_list = None
 
 if 'MG1363' in model_name:
-    cons_ID_combi_list += [['M_asp__L_e', 'M_asn__L_e']]
+    cons_ID_combi_list += [['M_asn__L_e', 'M_asp__L_e'], ['M_glc__D_e', 'M_ile__L_e']] # ['M_asp__L_e', 'M_asn__L_e']
 
 if cons_ID_combi_list:
     for cons_ID_combi in cons_ID_combi_list:
@@ -499,13 +499,14 @@ for model_dict in list_model_dicts:
         relevant_efms_df, full_relevant_ecms_df = find_associated_efms(model_dict['model'], model_dict['table_cons_df'],
                                                                        model_dict['ecms_df'],
                                                                        infos_obj + infos_cons, model_dict['model_path'],
-                                                                       use_external_compartment=USE_EXTERNAL_COMPARTMENT)
+                                                                       use_external_compartment=USE_EXTERNAL_COMPARTMENT,
+                                                                       only_relevant_ECMs=True)
         relevant_efms_df.to_csv(
             os.path.join(
-                result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+                result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv")) #, index=False)
         full_relevant_ecms_df.to_csv(
             os.path.join(
-                result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv"), index=False)
+                result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv")) #, index=False)
 
 # Todo: plot the EFMs on a map of the metabolic network - or overview/lumped metabolic network
 # Idea: select reactions for the map based on the active reactions in the EFMs.
