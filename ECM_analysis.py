@@ -7,17 +7,9 @@ from helpers_EFM_FBA import *
 # TODO: Try a bigger model
 model_name = "e_coli_core"
 # With the following models, some shit goes wrong always
-# model_name = "iAB_RBC_283"
-# model_name = "iNF517" #Flahaut lactis model Bigg version
 # model_name = "iJR904"
-# model_name = "iAF1260b"
-#model_name = "iAF1260b"  # E.coli
-#model_name = "iAF1260b_new" # E.coli
-#model_name = "lplawcfs1" #plantarum model Bas # species ending with _b are boundary species. extracellular compartment
-#model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
-# denoted with 'Extra_organism'
-model_name = "MG1363_20190628"  # lactis MG1363 model as updated for pcLactis, ECMs can be calculated for active, activities not retrieved
-# network, but something goes wrong when calculating the activities of the ECMs in the FBA solution. Supremum norm is non-zero.
+model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
+#model_name = "MG1363_20190628"
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
 
@@ -29,10 +21,12 @@ LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loade
 N_KOS = 0  # number of knockout models that will be created
 # adjust DROP_MODELS based on this.
 # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
-DROP_MODEL_TAGS = ['full', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
+DROP_MODEL_TAGS = ['full', 'active', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 USE_EXTERNAL_COMPARTMENT = None
-ONLY_RAYS = True # True or False
+ONLY_RAYS = False # True or False
 SAVE_result = False # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
+EXCECPTIONS = [] # reaction IDs that shouldn't be deleted in active model
+N_COLS = 3 # number of columns in plot_costs_ECMS_one_figure
 
 """START ANALYSIS"""
 """Create folders for storing the results"""
@@ -50,53 +44,46 @@ except:  # use version 2
 
 cbm.doFBAMinSum(cmod)
 intermediate_cmod = cmod.clone()
-# intermediate_cmod.setNotes(str(intermediate_cmod.getNotes()))
-
 
 """Adapt model to your liking, and update the FBA"""
 if model_name == "e_coli_core":
     # E. Coli Core specific adaptations
+    #DROP_MODEL_TAGS = []
+    DROP_MODEL_TAGS = ['active', 'fva', 'ko']
     # Set own constraints (no constraint on ATP, constraint on O2 though)
     ECOLI_BOUNDS = 'with_atpm' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
     glc_reaction = intermediate_cmod.getReaction('R_EX_glc__D_e')
-    glc_reaction.setUpperBound(-8.)
-    glc_reaction.setLowerBound(-10.)  # is original
-    # glc_reaction.reversible = False # was True
-
+    #glc_reaction.setUpperBound(-8.)
+    glc_reaction.setLowerBound(-10.)
     if ECOLI_BOUNDS == 'wo_atpm_one_constr':
         atp_reaction = intermediate_cmod.getReaction('R_ATPM')
-        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        atp_reaction.setLowerBound(0.)
         acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
         acetate_reaction.reversible = True
     elif ECOLI_BOUNDS == 'wo_atpm':
         atp_reaction = intermediate_cmod.getReaction('R_ATPM')
-        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        atp_reaction.setLowerBound(0.)
         oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
         # Set oxygen lowerbound to -14, -13 to restrict the oxygen uptake and change active ECMs
         oxygen_reaction.setLowerBound(-15.)  # -15.
         acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
         acetate_reaction.reversible = True
     elif ECOLI_BOUNDS == 'with_atpm':
-        atp_reaction = intermediate_cmod.getReaction('R_ATPM')
-        # atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        atp_reaction = intermediate_cmod.getReaction('R_ATPM') # demand > 0.
+        # atp_reaction.setLowerBound(0.)
         oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
         oxygen_reaction.setLowerBound(-15.)  # -15.
         acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
         acetate_reaction.reversible = True
     elif ECOLI_BOUNDS == 'forced_etoh':
         atp_reaction = intermediate_cmod.getReaction('R_ATPM')
-        atp_reaction.setLowerBound(0.) ## eunice_edit 0.
+        atp_reaction.setLowerBound(0.)
         oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
-        oxygen_reaction.setLowerBound(-15.)  # -15.
+        oxygen_reaction.setLowerBound(-15.)
         acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
-        # acetate_reaction.setLowerBound(-5.) # This works with ub=1000; reaction set reversible.
-        # acetate_reaction.setUpperBound(-1.)
-        # acetate_reaction.setUpperBound(0.) # This works with new version network.py with lb=-5.; reaction set reversible.
-        #acetate_reaction.setLowerBound(2.) # This works with ub=5; reaction set not reversible
-        #acetate_reaction.setUpperBound(5.) # This works with lb=2; reaction set not reversible
         acetate_reaction.reversible = True
         ethanol_reaction = intermediate_cmod.getReaction("R_EX_etoh_e")
-        ethanol_reaction.setLowerBound(2)
+        ethanol_reaction.setLowerBound(2.)
 
 elif model_name == 'iAF1260b_new':
     # E. coli
@@ -135,9 +122,21 @@ elif model_name == 'MG1363_20190628':
                 intermediate_cmod.setReactionBounds(rid, goel_bounds['LB0.6A'][rid], goel_bounds['UB0.6A'][rid])
                 print(intermediate_cmod.getReactionBounds(rid))
     elif GOEL_BOUNDS == 'FBA_adjusted':
+        N_COLS = 2 # number of columns in plot_costs_ECMS_one_figure
         for rid in goel_bounds_adjusted.index:
             if rid not in []:#["R_EX_pi_e", "R_EX_nac_e", "R_EX_o2_e", "R_EX_orn_e"]:#, "R_EX_pyr_e", "R_EX_succ_e", "R_EX_nh4_e", "R_EX_lac__L_e"]:
                 # 0.6
+                # Adjust to Goel biomass ATP requirement GAM
+                biomass_reaction = intermediate_cmod.getReaction("R_biomass_LLA")
+                GAM_val = 33.783 #Yu #19.317  # as calculated by Goel # 0.000000000000001
+                biomass_reaction.setStoichCoefficient("M_adp_c", GAM_val)
+                biomass_reaction.setStoichCoefficient("M_atp_c", -GAM_val)
+                biomass_reaction.setStoichCoefficient("M_pi_c", GAM_val)
+                biomass_reaction.setStoichCoefficient("M_h_c", GAM_val)
+                biomass_reaction.setStoichCoefficient("M_h2o_c", -GAM_val)
+                # Adjust to Goel maintenance ATP requirements NGAM
+                NGAM_val = 3.7172 #YU # Goel: 6.5972
+                intermediate_cmod.setReactionBounds("R_ATPM", lower=NGAM_val, upper=NGAM_val) #lower=19.7088336248, upper=19.7088336248)
                 print(intermediate_cmod.getReactionBounds(rid))
                 intermediate_cmod.setReactionBounds(rid, goel_bounds_adjusted['LB0.6A'][rid], goel_bounds_adjusted['UB0.6A'][rid])
                 print(intermediate_cmod.getReactionBounds(rid))
@@ -157,10 +156,60 @@ elif model_name == "lplawcfs1": #plantarum model Bas
     USE_EXTERNAL_COMPARTMENT = None
 
 elif model_name == "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01":
-    for rid in intermediate_cmod.getReactionIds(): #"R_EX_"):
-        print(intermediate_cmod.getReactionBounds(rid))
-        intermediate_cmod.setReactionBounds(rid, intermediate_cmod.getReactionLowerBound(rid) * 100.,
-                                                 intermediate_cmod.getReactionUpperBound(rid) * 100.)
+    EXCECPTIONS = ['R_PYDXK2'] # no deletion of reaction in active model
+    PLANTARUM_BOUNDS = 'teusink2009' # Choose from 'default', 'teusink2009'
+    if PLANTARUM_BOUNDS == 'default':
+        for rid in intermediate_cmod.getReactionIds(): #"R_EX_"):
+            print(intermediate_cmod.getReactionBounds(rid))
+            intermediate_cmod.setReactionBounds(rid, intermediate_cmod.getReactionLowerBound(rid) * 100.,
+                                                     intermediate_cmod.getReactionUpperBound(rid) * 100.)
+    elif PLANTARUM_BOUNDS == 'teusink2009':
+        filepath = os.path.join(result_dir, "..", "Teusink2009bounds.xlsx")
+        teusink2009_bounds = pd.read_excel(filepath, index_col=1)
+        # teusink2009_bounds['rid'] = teusink2009_bounds.index
+        # for reaction in teusink2009_bounds.index:
+        #     if reaction.endswith("(e)"):
+        #         teusink2009_bounds['rid'][reaction] = "R_" + reaction.replace("-", "_")[:-3] +  "_e"
+        #     else:
+        #         teusink2009_bounds['rid'][reaction] = "R_" + reaction.replace("-", "_")
+
+        # Set biomass objective
+        intermediate_cmod.setReactionBounds('R_biomass_LPL_RETB_t576_NoATP', 0., 0.)
+        intermediate_cmod.setReactionBounds('R_biomass_LPL60', 0., 999999.)
+        intermediate_cmod.createObjectiveFunction('R_biomass_LPL60')
+
+        # make reaction reversible because of infeasible results & should be reversible transporter
+        reaction = intermediate_cmod.getReaction("R_THRt2r")
+        reaction.reversible=True
+        reaction.setLowerBound(-999999.)
+
+        # Set bounds exchange reactions
+        for rid in intermediate_cmod.getReactionIds("R_EX_"):
+            intermediate_cmod.setReactionBounds(rid, 0., 999999.)
+        for rid in teusink2009_bounds['RID']:
+            if teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0] > 0:
+                intermediate_cmod.setReactionLowerBound(rid, teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0])
+            elif teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0] == 0:
+                intermediate_cmod.setReactionLowerBound(rid, teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0])
+            else:
+                intermediate_cmod.setReactionLowerBound(rid, teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0])
+            if rid in ["R_EX_thr__L_e"]: #, "R_EX_pyr_e"]:
+                intermediate_cmod.setReactionLowerBound(rid, teusink2009_bounds[teusink2009_bounds['RID']==rid]['LOWER BOUND'][0])
+            intermediate_cmod.setReactionUpperBound(rid, teusink2009_bounds[teusink2009_bounds['RID']==rid]['UPPER BOUND'][0])
+
+        # Test if higher ATP maintenance requirement leads to same growth rate as in paper Teusink 2009. Yes. 0.26/h
+        #intermediate_cmod.setReactionBounds("R_ATPM", 3.94, 3.94)
+        intermediate_cmod.setReactionBounds("R_ATPM", 0.29, 0.29)
+
+        # Robustness_analysis_changes
+        newteusink2009_bounds = pd.read_excel(filepath, sheet_name='Robustness_analysis_changes', index_col=1)
+        for rid in newteusink2009_bounds['RID']:
+            intermediate_cmod.setReactionUpperBound(rid, newteusink2009_bounds[newteusink2009_bounds['RID']==rid]['UPPER BOUND'][0])
+            intermediate_cmod.setReactionLowerBound(rid, newteusink2009_bounds[newteusink2009_bounds['RID']==rid]['LOWER BOUND'][0])
+
+        intermediate_cmod.setReactionBounds("R_EX_o2_e",
+                                            teusink2009_bounds[teusink2009_bounds['RID'] == "R_EX_o2_e"]['LOWER BOUND'][0],
+                                            teusink2009_bounds[teusink2009_bounds['RID'] == "R_EX_o2_e"]['UPPER BOUND'][0])
 
 original_FBA_val = cbm.doFBA(intermediate_cmod)
 
@@ -226,8 +275,8 @@ if os.path.exists(active_model_path) and LOAD_IF_AVAILABLE:  # Checks if this mo
         intermediate_cmod_active = cbm.readSBML2FBA(active_model_path)
         # intermediate_cmod_active.setNotes(str(intermediate_cmod_active.getNotes().encode(encoding='ascii', errors='ignore')))
 else:
-    intermediate_cmod_active = delete_non_active_network(intermediate_cmod, which_zeros='flux_zero', zero_tol=1e-15,
-                                                         opt_tol=1e-8)  # 15, 8
+    intermediate_cmod_active = delete_non_active_network(intermediate_cmod, which_zeros='flux_zero', zero_tol=1e-20,
+                                                         opt_tol=1e-8, exceptions=EXCECPTIONS) # 15, 8
     # intermediate_cmod_active.setNotes(str(intermediate_cmod_active.getNotes().encode(encoding='ascii', errors='ignore')))
 
 # Create dictionary for active subnetwork
@@ -446,8 +495,13 @@ if len(constrained_ext_metabs) > 1:
 else:
     cons_ID_combi_list = None
 
-if 'MG1363' in model_name:
-    cons_ID_combi_list += [['M_asn__L_e', 'M_asp__L_e'], ['M_glc__D_e', 'M_ile__L_e']] # ['M_asp__L_e', 'M_asn__L_e']
+#if 'MG1363' in model_name:
+#    cons_ID_combi_list += [['M_asn__L_e', 'M_asp__L_e'], ['M_glc__D_e', 'M_ile__L_e']] # ['M_asp__L_e', 'M_asn__L_e']
+
+if 'Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01' in model_name:
+    #cons_ID_combi_list = list(itertools.combinations(['M_glyc_e', 'M_o2_e', 'M_cit_e'], 2))
+    #cons_ID_combi_list = [['M_glyc_e', 'M_o2_e'], ['M_cit_e', '']]
+    cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
 
 if cons_ID_combi_list:
     for cons_ID_combi in cons_ID_combi_list:
@@ -460,12 +514,15 @@ else:
     #for ind in range(0, len(constrained_ext_metabs), 2):
     # print(ind)
     # Select constraints that will be plotted in this figure
-    cons_for_fig = constrained_ext_metabs[ind:max(ind + 2, len(constrained_ext_metabs))]
+    cons_for_fig = constrained_ext_metabs
     # Plot the results of the different models (with different (sub)networks) in one plot
     plot_different_approaches_one_figure(list_model_dicts, infos_obj,  # list_model_dicts_remember[0]['infos_obj'],
                                              infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
                                              obj_val=objective_val,
-                                             result_dir=result_dir) #, cons_IDs=cons_for_fig)
+                                             result_dir=result_dir, cons_IDs=cons_for_fig)
+
+
+
 
 # Now make for each approach for which we calculated the activities of the ECMs a different plot in which the usage of
 # the ECMs is shown with vectors.
@@ -473,8 +530,15 @@ if cons_ID_combi_list:
     for model_dict in list_model_dicts:
         if model_dict['get_activities']:
             print('Plotting the cost vectors including usage for model %s' % model_dict['model_name'])
+            # Plot ECM fraction per objective and demanded metabolite
+            plot_ECM_fractions_per_objective(model_dict, result_dir=result_dir)
+
+            # Plot costs of ECMS in constraint space plot
+            plot_costs_ECMS_one_figure(model_dict, infos_cons, cons_ID_combi_list=cons_ID_combi_list,
+                                       result_dir=result_dir, n_cols=N_COLS)
             for cons_ID_combi in cons_ID_combi_list:
                 print(cons_ID_combi)
+                # Plot cost vector plot
                 plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                            cons_IDs=cons_ID_combi, obj_val=objective_val,
                            show_active=True, result_dir=result_dir)
@@ -483,6 +547,9 @@ else:
     for model_dict in list_model_dicts:
         if model_dict['get_activities']:
             print('Plotting the cost vectors including usage for model %s' % model_dict['model_name'])
+            # Plot ECM fraction per objective and demanded metabolite
+            plot_ECM_fractions_per_objective(model_dict, result_dir=result_dir)
+            # Plot cost vector plots
             plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                        cons_IDs=constrained_ext_metabs, obj_val=objective_val,
                        show_active=True, result_dir=result_dir)
@@ -507,6 +574,20 @@ for model_dict in list_model_dicts:
         full_relevant_ecms_df.to_csv(
             os.path.join(
                 result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv")) #, index=False)
+
+
+# Todo: find differences/similarities between EFMs
+
+#cbm.analyzeModel(intermediate_cmod,  with_reduced_costs='scaled')
+#nzrc_dictionaries, n_objectives = get_nzrc(intermediate_cmod)
+#cbm.doFBAMinSum(intermediate_cmod)
+#
+result_nzrc = pd.DataFrame()
+for nzrc in nzrc_dictionaries:
+    print(nzrc["rid"],nzrc["nzrc"], nzrc["flux_val"]) #unscaled reduced costs
+    result_nzrc[nzrc["rid"]] = [nzrc["nzrc"], nzrc["flux_val"]]
+result_nzrc.index = ['nzrc', 'flux_val']
+result_nzrc.transpose()
 
 # Todo: plot the EFMs on a map of the metabolic network - or overview/lumped metabolic network
 # Idea: select reactions for the map based on the active reactions in the EFMs.
