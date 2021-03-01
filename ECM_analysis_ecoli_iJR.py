@@ -3,331 +3,9 @@ import itertools
 
 from helpers_EFM_FBA import *
 
-######### function for large E. coli application
-
-def plot_costs_flux(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, show_active=True, result_dir=None, vector_focus=True, annotate_ecms=True):
-    """
-    Plots the costs of all ECMs in cost_df in the cost vector figure, and shows ECM_usage in the FBA-solution by having
-    vectors.
-    :param result_dir: directory path
-            Directory for storing the figures
-    :param model_dict: dictionary
-            Dictionary with all information about one of the models that we are considering
-    :param infos_obj: list
-            List of dictionaries concerning the different objectives
-    :param infos_cons: list
-            List of dictionaries concerning the different constraints
-    :param cons_IDs: list of cons_IDs
-            List of strings reflecting the different constraints that should be plotted
-    :param obj_val: float
-            Objective value needed for potentially rescaling the plot
-    :param show_active: Boolean
-            Show or not show ECM usage
-    :param vector_focus: Boolean
-            Focus on vectors or show all ECMs
-    """
-    # Some important numbers
-    n_objectives = len(infos_obj)
-    scatter_active = 100
-    alpha_active = 0.5
-    scatter_normal = 15
-    quiverwidth = 0.01
-
-    # If the objective is really large, we will show the costs to produce more than one unit objective. We use the
-    # scaling factor to calculate the new costs
-    scale_obj_val = np.floor(np.log2(obj_val))
-    scaling_factor = 2 ** scale_obj_val
-
-    # Find the indices of the ECMs that are active in the FBA solution
-    actECMs_inds = list(model_dict['table_cons_df'].loc[model_dict['table_cons_df']['active'] > 0]['orig_ECM_number'])
-
-    # Make sure that we always have two constraints for the plot
-    cons_IDs = select_cons_IDs(infos_cons, cons_IDs)
-
-    # Create one figure with n subplots, where n is the number of 'objectives'. A lower bound that should be met is also
-    # considered an objective here.
-    if n_objectives > 3:
-        fig, axes = plt.subplots(np.int(np.ceil(n_objectives/3)), 3, figsize=(7,6))
-        quiverwidth = quiverwidth * 3
-    else:
-        fig, axes = plt.subplots(1, n_objectives, figsize=(7, 6))
-    if n_objectives == 1:
-        axes = [axes]  # Necessary evil
-    # We loop over the subplots, i.e., the number of objectives
-    for index, objective_dict in enumerate(infos_obj):
-        if n_objectives > 3:
-            ax = axes[np.int(index/3)][index%3]
-        else:
-            ax = axes[index]
-        plt.sca(ax)
-        obj_string = objective_dict['ext_metab']
-
-        # In the x_ulims and y_ulims we will store a number of candidates for the upper bound of the plot. We will
-        # eventually take the maximum of these candidates
-        x_ulims = []
-        y_ulims = []
-        x_llims = []
-        y_llims = []
-
-        # Make cost table with only the constraints that are to be shown
-        cost_df, cons_indices = get_cost_df(model_dict, infos_cons, cons_IDs, index, objective_dict,
-                                            scaling_factor=scaling_factor)
-
-        if show_active and 'active' not in cost_df.columns:
-            print("Can't show active EFMs if this information is not provided.")
-            return
-        #dfsd
-        x_label = cons_IDs[0]
-        y_label = cons_IDs[1]
-
-        # Determine the bounds for the axes along which we want to plot the costs. It is a bit complicated, but
-        # works
-        if objective_dict['obj_cons'] == 'obj':
-            x_llims.append(-0.05)
-            x_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 0]) * 1.1)))
-            if not vector_focus:
-                x_ulims.append(max(cost_df[cons_IDs[0]]) * 1.1)
-                x_llims.append(min(0, min(cost_df[cons_IDs[0]])))
-            y_llims.append(-0.05)
-            y_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 1]) * 1.1)))
-            if not vector_focus:
-                y_ulims.append(max(cost_df[cons_IDs[1]]) * 1.1)
-                y_llims.append(min(0, min(cost_df[cons_IDs[1]])))
-        else:
-            x_ulims.append(1.1)
-            y_ulims.append(1.1)
-            x_llims.append(-0.05)
-            if not vector_focus:
-                x_ulims.append(max(cost_df[cons_IDs[0]]) * 1.1)
-                x_llims.append(min(0, min(cost_df[cons_IDs[0]])))
-            y_llims.append(-0.05)
-            if not vector_focus:
-                y_ulims.append(max(cost_df[cons_IDs[1]]) * 1.1)
-                y_llims.append(min(0, min(cost_df[cons_IDs[1]])))
-
-        if 'virtual' in cons_IDs:
-            y_ulims = [0.3]
-            y_llims = [-0.3]
-
-        # Find active ECMs
-        actECMs = cost_df.loc[cost_df['orig_ECM_number'].isin(actECMs_inds)]
-        # The number of active ECMs for this objective can be lower than the number of active ECMs in total, because
-        # we cannot plot the costs for an ECM that does not contribute anything to this objective.
-        n_actECMs_curr_obj = len(actECMs)
-
-        # get flux values of cons_IDs
-        flux_values = []
-        # Loop over all constraints and drop it from the cost table if we do not want to plot this constraint now
-        for cons_dict in infos_cons:
-            cons_metab = cons_dict['ext_metab']
-            if cons_metab in cons_IDs:
-                flux_values += [cons_dict['flux_val']]
-
-        # Here we will store the x,y-length of the cost vectors if multiplied by its activity
-        ecm_usage = np.zeros((n_actECMs_curr_obj, 2))
-        flux_values = np.ones((n_actECMs_curr_obj, 1))
-        # x-length
-        ecm_usage[:, 0] = actECMs.values[:, cons_indices[0]] * actECMs['active']
-        # y-length
-        ecm_usage[:, 1] = actECMs.values[:, cons_indices[1]] * actECMs['active']
-
-        # Construct two columns of starting positions for the vectors for the vector addition with which we show the
-        # usage of the ECMs. The end point of the first vector is the starting point of the second vector, etc.
-        quiver_start = ecm_usage.cumsum(axis=0)
-        # Append starting point (0,0) of the first vector
-        quiver_start = np.append(np.zeros((1, 2)), quiver_start, axis=0)
-        # Delete last row because this is actually the end point of the last vector
-        quiver_start = quiver_start[:-1, :]
-        # Add the x,y-lengths of the vectors as two additional columns
-        ecm_usage = np.append(quiver_start, ecm_usage, axis=1)
-
-        # The following thus are the x,y-begin positions of the vectors, and the x,y-length
-        Xusage, Yusage, Uusage, Vusage = zip(*ecm_usage)
-
-        # TODO: Define colors in cmap
-        # We use a different colour for each active ECM
-
-        # Get the indices of the ECMs that contribute to this objective, needed for getting the right colour
-        #curr_act_inds = [counter for counter, ind in enumerate(actECMs_inds) if ind in actECMs['orig_ECM_number']]
-        curr_act_inds = [counter for counter, ind in enumerate(cost_df['orig_ECM_number']) if ind in actECMs['orig_ECM_number']]
-        #curr_act_inds = [counter for counter, ind in enumerate(actECMs['orig_ECM_number'])]
-
-        # if len(actECMs_inds) > 20:
-        #     cmap1 = cm.get_cmap('tab20b', 20)
-        #     cmap2 = cm.get_cmap('tab20c', len(actECMs_inds) - 20)
-        #     cmap_colors = np.concatenate((cmap1.colors, cmap2.colors), axis=0)
-        #     cmap_curr = cmap_colors[curr_act_inds, :]
-        # elif len(actECMs_inds) < 11:
-        #     cmap = cm.get_cmap('tab10', len(actECMs_inds))
-        #     cmap_colors = cmap.colors
-        #     cmap_curr = cmap.colors[curr_act_inds, :]
-        # else:  # if 10 < len(actECMs_inds) < 21
-        #     cmap = cm.get_cmap('tab20', len(actECMs_inds))
-        #     cmap_colors = cmap.colors
-        #     cmap_curr = cmap.colors[curr_act_inds, :]
-
-        if len(cost_df['orig_ECM_number']) > 20:
-            cmap1 = cm.get_cmap('tab20b', 20)
-            cmap2 = cm.get_cmap('tab20c', len(cost_df['orig_ECM_number']) - 20)
-            cmap_colors = np.concatenate((cmap1.colors, cmap2.colors), axis=0)
-            cmap_curr = cmap_colors[curr_act_inds, :]
-        elif len(cost_df['orig_ECM_number']) < 11:
-            cmap = cm.get_cmap('tab10', len(cost_df['orig_ECM_number']))
-            cmap_colors = cmap.colors
-            cmap_curr = cmap.colors[curr_act_inds, :]
-        else:  # if 10 < len(cost_df['orig_ECM_number']) < 21
-            cmap = cm.get_cmap('tab20', len(cost_df['orig_ECM_number']))
-            cmap_colors = cmap.colors
-            cmap_curr = cmap.colors[curr_act_inds, :]
-
-        # TODO: Plot cost dots of normal ECMs
-
-        print(cmap_colors)
-        print(cmap_curr)
-        print(cost_df[x_label])
-        # TODO: skip this, or make large datapoint!
-        # Plot the costs per unit objective of the active ECMs
-        actECMs.plot(kind='scatter', x=x_label, y=y_label, color=cmap_curr, ax=ax,
-                     s=scatter_normal,  # scatter_active,
-                     # alpha=alpha_active,
-                     label='active ECM')  # , legend=True, label=[str(i) for i in actECMs_inds])
-        # TODO: different colour per ECM
-        cost_df.plot.scatter(x=x_label, y=y_label, color=cmap_colors, #'grey',
-                             ax=ax,
-                             s=scatter_active, label=model_dict['model_name']) #, legend=False)
-
-        # Annotate costs dots with original ECM value
-        #if annotate_ecms:
-        #    for i, txt in enumerate(cost_df['orig_ECM_number']):
-        #        if i%2 == 0:
-        #            #ax.annotate(str(txt), (list(cost_df[x_label])[i]*1.05, list(cost_df[y_label])[i]*1.05))
-        #            ax.text(list(cost_df[x_label])[i]+0.05, list(cost_df[y_label])[i], str(txt), horizontalalignment='left', verticalalignment='center', fontsize=12)
-        #        else:
-        #            #ax.annotate(str(txt), (list(cost_df[x_label])[i]*0.95, list(cost_df[y_label])[i]*0.95))
-        #            ax.text(list(cost_df[x_label])[i]-0.05, list(cost_df[y_label])[i], str(txt), horizontalalignment='right', verticalalignment='center', fontsize=12)
-
-
-
-
-
-        # TODO: make sure that the vectors have the same colour as ECM datapoints
-
-        # Plot the usage of ECMs as vectors
-        # for i in range(len(Xusage)):
-        #    color = cmap_curr[i, :]
-        #    ax.quiver(Xusage[i], Yusage[i], Uusage[i], Vusage[i], pivot='tail', angles='xy', scale_units='xy',
-        #              linestyle='--', color=color, scale=1, width=quiverwidth)
-
-        # Set dimensions of the plot and configure axes
-        # Also we make a light grey "constraint-box". The allowed region for solutions should be in this box.
-        if vector_focus:
-            ax.set(adjustable='box', aspect='equal')
-        y_ulim = 1.8 #max(y_ulims)
-        x_ulim = 1.8 #max(x_ulims)
-        x_llim = min(x_llims)
-        y_llim = min(y_llims)
-        ax.plot([1, 1], [y_llim, y_ulim], '--', color='grey', linewidth=2.0)
-        ax.set_xlim([x_llim, x_ulim])
-        ax.set_ylim([y_llim, y_ulim])
-        # plt.xlabel('Needed fraction of constraint: ' + x_label)
-        ax.set(xlabel='')
-        if 'virtual' in cons_IDs:
-            ax.axes.get_yaxis().set_visible(False)
-            ax.axhline(y=0, color='grey', linewidth=2.0)
-        else:
-            ax.set(ylabel='')
-            # plt.ylabel('Needed fraction of constraint: ' + y_label)
-            ax.plot([0, 1], [0, 1], '-.', color='grey')
-            ax.axes.get_yaxis().set_visible(True)
-            ax.plot([x_llim, x_ulim], [1, 1], '--', color='grey', linewidth=2.0)
-
-        # We change the fontsize of minor ticks label
-        ax.tick_params(axis='both', which='major', labelsize=10)
-        ax.tick_params(axis='both', which='minor', labelsize=10)
-
-        # Plot the usage of ECMs as vectors
-        for i in range(len(Xusage)):
-            color = cmap_curr[i, :]
-            ax.quiver(Xusage[i], Yusage[i], Uusage[i], Vusage[i], pivot='tail', angles='xy', scale_units='xy',
-                      linestyle='--', color=color, scale=1, width=quiverwidth, zorder=3.)
-
-        if objective_dict['obj_cons'] == 'obj':
-            ax.set_title("Fraction needed \n per %.2f: " % scaling_factor + obj_string, size=10)
-            # plt.title("Fraction needed per %.2f:\n" % scaling_factor + obj_string)
-        else:
-            ax.set_title("Fraction needed for \n demanded: " + obj_string, size=10)
-            # plt.title("Fraction needed for demanded:\n" + obj_string)
-
-        #ax.legend(loc='upper right')
-        # set legend of axes invisible
-        ax.get_legend().set_visible(False)
-        # get legend handles and labels to create shared legend
-        handles, labels = ax.get_legend_handles_labels()
-
-        # Legend for ECM IDs
-        unique_curr_act_inds = list(cost_df['orig_ECM_number'].index)
-        print(unique_curr_act_inds)
-        legend_elements = []
-        for i, ind in enumerate(unique_curr_act_inds):
-            legend_elements.append(
-                Line2D([0], [0], color='w', markerfacecolor=cmap_colors[i, :],  # cmap_curr[i]
-                       marker='o',
-                       label=ind, #cost_df['orig_ECM_number'][ind],
-                       markersize=scatter_normal / 3 * 2)) #, alpha=alpha_active))
-
-        fig.legend(handles=legend_elements, bbox_to_anchor=(0.5, 0.), loc='lower center',
-                   borderaxespad=0., ncol=5,
-                   frameon=False, prop={'size': 10},
-                   # bbox_to_anchor=(1., 0.5), loc='center left', prop={'size': 8}, frameon = False,
-                   title='ECM ID')
-
-    # Create common x and y axis labels
-    fig.add_subplot(111, frame_on=False)
-    plt.tick_params(labelcolor="none", bottom=False, left=False)
-
-    plt.xlabel('Needed fraction of constraint: ' + [met.name for met in model_dict['network'].metabolites if met.id == x_label][0])
-    if not 'virtual' in cons_IDs:
-        plt.ylabel(ylabel='Needed fraction of constraint: ' + [met.name for met in model_dict['network'].metabolites if met.id == y_label][0])
-
-    # Create shared legend based on latest ax handles and labels
-    #fig.legend(handles, labels, bbox_to_anchor=(0.5, 0.), loc='lower center',
-    #           borderaxespad=0., ncol=2,
-    #           frameon=False, prop={'size': 10})
-    plt.subplots_adjust(bottom=0.25, hspace=0.70)
-
-    if result_dir:
-        fig.savefig(
-            os.path.join(result_dir,
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".png"),
-            bbox_inches="tight")
-        fig.savefig(
-            os.path.join(result_dir,
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".pdf"),
-            bbox_inches="tight")
-        fig.savefig(
-            os.path.join(result_dir,
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".svg"),
-            bbox_inches="tight")
-    else:
-        fig.savefig(
-            os.path.join(os.getcwd(),
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".png"),
-            bbox_inches="tight")
-        fig.savefig(
-            os.path.join(os.getcwd(),
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".pdf"),
-            bbox_inches="tight")
-        fig.savefig(
-            os.path.join(os.getcwd(),
-                         "cost_plot" + model_dict['model_name'] + "_" + cons_IDs[0] + "_" + cons_IDs[1] + ".svg"),
-            bbox_inches="tight")
-
-
-
 """CONSTANTS"""
 # TODO: Try a bigger model
-model_name = "e_coli_core"
-# With the following models, some shit goes wrong always
+# model_name = "e_coli_core"
 # model_name = "iAB_RBC_283"
 # model_name = "iNF517" #Flahaut lactis model Bigg version
 model_name = "iJR904"
@@ -352,8 +30,9 @@ N_KOS = 0  # number of knockout models that will be created
 # The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 DROP_MODEL_TAGS = ['full', 'active', 'fva', 'active_hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 USE_EXTERNAL_COMPARTMENT = None
-ONLY_RAYS = True # True or False
-SAVE_result = False # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
+ONLY_RAYS = False  # True or False
+SAVE_result = False  # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
+VERBOSE = True
 
 """START ANALYSIS"""
 """Create folders for storing the results"""
@@ -547,8 +226,8 @@ list_model_dicts.append(
 """Calculate ECMs and/or EFMs"""
 # For genome-scale models we cannot yet calculate ECMs, then we should calculate them for only the active subnetwork,
 # or only for the model with external metabolites that are ignored.
-# TODO: Make calculation stop when it takes too long, and give error message
-# For now I manually remove some models defined at top of the file
+
+# We remove some models defined at top of the file
 list_model_dicts_remember = list_model_dicts.copy()
 list_model_dicts = [model_dict for model_dict in list_model_dicts if model_dict['drop_tag'] not in DROP_MODEL_TAGS]
 
@@ -623,7 +302,7 @@ if len(constrained_ext_metabs) > 1:
         # all possible combinations of constraints
         cons_ID_combi_list = list(itertools.combinations(constrained_ext_metabs, 2))
     else:
-        cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
+        cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs, list_model_dicts[0])
 else:
     cons_ID_combi_list = None
 
@@ -682,13 +361,16 @@ for model_dict in list_model_dicts:
                                                                        model_dict['ecms_df'],
                                                                        infos_obj + infos_cons, model_dict['model_path'],
                                                                        use_external_compartment=USE_EXTERNAL_COMPARTMENT,
-                                                                       only_relevant_ECMs=True)
+                                                                       only_relevant_ECMs=False)
         relevant_efms_df.to_csv(
             os.path.join(
                 result_dir, "efms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv")) #, index=False)
         full_relevant_ecms_df.to_csv(
             os.path.join(
                 result_dir, "full_ecms_corresponding_to_hide_ecms" + model_dict['model_name'] + ".csv")) #, index=False)
+
+        if VERBOSE:
+            print_ecms_direct(np.transpose(full_relevant_ecms_df.values), full_relevant_ecms_df.columns)
 
 
 # Todo: find differences/similarities between ECMs and EFMs
@@ -716,7 +398,7 @@ for nzrc in nzrc_dictionaries:
 result_nzrc.index = ['nzrc', 'flux_val']
 #result_nzrc.transpose()
 
-# Todo: plot the EFMs on a map of the metabolic network - or overview/lumped metabolic network
+# TODO: plot the EFMs on a map of the metabolic network - or overview/lumped metabolic network
 # Idea: select reactions for the map based on the active reactions in the EFMs.
 # Lump reactions and model if needed for visualization. <- still to be developed
 # Create groups of reactions based on EFMs, if in linear pathway add a lumped reaction to model and to group and remove
