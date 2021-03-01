@@ -1,4 +1,3 @@
-import pickle
 import itertools
 
 from helpers_EFM_FBA import *
@@ -8,8 +7,8 @@ from helpers_EFM_FBA import *
 model_name = "e_coli_core"
 # With the following models, some shit goes wrong always
 # model_name = "iJR904"
-# model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
-# model_name = "MG1363_20190628"
+model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
+#model_name = "MG1363_20190628"
 #model_name = "iIT341" # Helicobacter pylori 26695 works.
 #model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
 
@@ -19,15 +18,14 @@ result_dir = os.path.join(os.getcwd(), "data", model_name + "_2", "EFM_yield_ana
 model_dir = os.path.join("models")
 LOAD_IF_AVAILABLE = False  # If this is true, newly created models will be loaded if the program runs a second time
 N_KOS = 0  # number of knockout models that will be created
-# The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 # adjust DROP_MODELS based on this.
+# The complete model is sometimes to large to calculate ECMs. This is therefore dropped manually
 DROP_MODEL_TAGS = ['full', 'active', 'fva', 'hidden', 'ko']  # ['full','active','fva','hidden','active_hidden' ,'ko']
 USE_EXTERNAL_COMPARTMENT = None
 ONLY_RAYS = False # True or False
 SAVE_result = False # saves list_model_dict after ECM enumeration and calculation of ECM activities in FBA solution
 EXCECPTIONS = [] # reaction IDs that shouldn't be deleted in active model
 N_COLS = 3 # number of columns in plot_costs_ECMS_one_figure
-SQUARED = True # forced squared plot for cost vector plot
 
 """START ANALYSIS"""
 """Create folders for storing the results"""
@@ -39,6 +37,7 @@ if not os.path.exists(result_dir):
 """Load main model and clone it to have a model that we can adapt"""
 try:
     cmod = cbm.readSBML3FBC(os.path.join(model_dir, model_name + ".xml"))
+    # cmod.setNotes(cmod.getNotes().encode(encoding='ascii', errors='ignore'))
 except:  # use version 2
     cmod = cbm.readSBML2FBA(os.path.join(model_dir, model_name + ".xml"))
 
@@ -51,7 +50,7 @@ if model_name == "e_coli_core":
     #DROP_MODEL_TAGS = []
     DROP_MODEL_TAGS = ['active', 'fva', 'ko']
     # Set own constraints (no constraint on ATP, constraint on O2 though)
-    ECOLI_BOUNDS = 'forced_etoh' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
+    ECOLI_BOUNDS = 'with_atpm' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
     glc_reaction = intermediate_cmod.getReaction('R_EX_glc__D_e')
     #glc_reaction.setUpperBound(-8.)
     glc_reaction.setLowerBound(-10.)
@@ -61,7 +60,6 @@ if model_name == "e_coli_core":
         acetate_reaction = intermediate_cmod.getReaction('R_EX_ac_e')
         acetate_reaction.reversible = True
     elif ECOLI_BOUNDS == 'wo_atpm':
-        SQUARED = False
         atp_reaction = intermediate_cmod.getReaction('R_ATPM')
         atp_reaction.setLowerBound(0.)
         oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
@@ -564,15 +562,17 @@ if len(constrained_ext_metabs) > 1:
         # all possible combinations of constraints
         cons_ID_combi_list = list(itertools.combinations(constrained_ext_metabs, 2))
     else:
-        cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs, model_dict)
+        cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
 else:
     cons_ID_combi_list = None
+
+#if 'MG1363' in model_name:
+#    cons_ID_combi_list += [['M_asn__L_e', 'M_asp__L_e'], ['M_glc__D_e', 'M_ile__L_e']] # ['M_asp__L_e', 'M_asn__L_e']
 
 if 'Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01' in model_name:
     cons_ID_combi_list = list(itertools.combinations(['M_glyc_e', 'M_o2_e', 'M_cit_e'], 2))
     #cons_ID_combi_list = [['M_glyc_e', 'M_o2_e'], ['M_cit_e', '']]
-    cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs, model_dict)
-    # In latter case: adjust vector_focus = False in plot_costs_ECMS_one_figure()
+    #cons_ID_combi_list = get_cons_ID_combinations(constrained_ext_metabs)
 
 if cons_ID_combi_list:
     for cons_ID_combi in cons_ID_combi_list:
@@ -606,13 +606,13 @@ if cons_ID_combi_list:
 
             # Plot costs of ECMS in constraint space plot
             plot_costs_ECMS_one_figure(model_dict, infos_cons, cons_ID_combi_list=cons_ID_combi_list,
-                                       result_dir=result_dir, n_cols=N_COLS, vector_focus=True)
+                                       result_dir=result_dir, n_cols=N_COLS)
             for cons_ID_combi in cons_ID_combi_list:
                 print(cons_ID_combi)
                 # Plot cost vector plot
                 plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                            cons_IDs=cons_ID_combi, obj_val=objective_val,
-                           show_active=True, result_dir=result_dir, squared_plot=SQUARED)
+                           show_active=True, result_dir=result_dir)
                 plot_costs_ECMs(model_dict, infos_cons, cons_IDs=cons_ID_combi, result_dir=result_dir)
 else:
     for model_dict in list_model_dicts:
@@ -623,7 +623,7 @@ else:
             # Plot cost vector plots
             plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                        cons_IDs=constrained_ext_metabs, obj_val=objective_val,
-                       show_active=True, result_dir=result_dir, squared_plot=SQUARED)
+                       show_active=True, result_dir=result_dir)
             plot_costs_ECMs(model_dict, infos_cons, cons_IDs=constrained_ext_metabs, result_dir=result_dir)
 
 """Find corresponding EFM(s) for active ECM(s)"""
@@ -683,6 +683,3 @@ for model_dict in list_model_dicts:
     print('Active ECMs and used metabolites')
     print(get_active_ecms(model_dict))
     print()
-
-
-

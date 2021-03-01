@@ -5,7 +5,7 @@ from helpers_EFM_FBA import *
 
 ######### function for large E. coli application
 
-def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, show_active=True, result_dir=None, vector_focus=True, annotate_ecms=True):
+def plot_costs_flux(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, show_active=True, result_dir=None, vector_focus=True, annotate_ecms=True):
     """
     Plots the costs of all ECMs in cost_df in the cost vector figure, and shows ECM_usage in the FBA-solution by having
     vectors.
@@ -115,8 +115,17 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         # we cannot plot the costs for an ECM that does not contribute anything to this objective.
         n_actECMs_curr_obj = len(actECMs)
 
+        # get flux values of cons_IDs
+        flux_values = []
+        # Loop over all constraints and drop it from the cost table if we do not want to plot this constraint now
+        for cons_dict in infos_cons:
+            cons_metab = cons_dict['ext_metab']
+            if cons_metab in cons_IDs:
+                flux_values += [cons_dict['flux_val']]
+
         # Here we will store the x,y-length of the cost vectors if multiplied by its activity
         ecm_usage = np.zeros((n_actECMs_curr_obj, 2))
+        flux_values = np.ones((n_actECMs_curr_obj, 1))
         # x-length
         ecm_usage[:, 0] = actECMs.values[:, cons_indices[0]] * actECMs['active']
         # y-length
@@ -356,33 +365,15 @@ if not os.path.exists(result_dir):
 """Load main model and clone it to have a model that we can adapt"""
 try:
     cmod = cbm.readSBML3FBC(os.path.join(model_dir, model_name + ".xml"))
-    # cmod.setNotes(cmod.getNotes().encode(encoding='ascii', errors='ignore'))
 except:  # use version 2
     cmod = cbm.readSBML2FBA(os.path.join(model_dir, model_name + ".xml"))
 
 cbm.doFBAMinSum(cmod)
 intermediate_cmod = cmod.clone()
-# intermediate_cmod.setNotes(str(intermediate_cmod.getNotes()))
-
 
 """Adapt model to your liking, and update the FBA"""
-# E. coli
-"""
-Ik heb het nog even opgezocht en we hadden de volgende metabolieten gedefiniëerd als inputs: 
-glucose, 
-ammonium, 
-oxygen, 
-phosphate, 
-sulfate
-Dit was het minimaalste medium waarop we iJR904 konden laten groeien, dus we hebben daarop gefocust. 
-Ik zie dat H2O bijvoorbeeld geen input is. Ik zou daar de consequenties misschien nog wel van kunnen bekijken, 
-als ik nog bij SurfSara kan. Is dat handig?
-
-Alle andere exchange reacties staan dus wel ‘open’ alleen met zero lower bound, 
-dus die kunnen alleen als output gebruikt worden, inclusief biomassa dus ook.
-"""
 oxygen_reaction = intermediate_cmod.getReaction('R_EX_o2_e')
-oxygen_reaction.setLowerBound(-1000)  # -15, -10, -5-> give two active constraints
+oxygen_reaction.setLowerBound(-10)  # -15, -10, -5-> give two active constraints; -1000 -> give 1 active constraint
 atp_reaction = intermediate_cmod.getReaction('R_ATPM')
 atp_reaction.setLowerBound(0.)
 intermediate_cmod.setReactionLowerBound("R_EX_co2_e", 0.)
@@ -392,7 +383,7 @@ intermediate_cmod.setReactionLowerBound("R_EX_h_e", 0.)
 intermediate_cmod.setReactionLowerBound("R_EX_k_e", 0.)
 intermediate_cmod.setReactionLowerBound("R_EX_na1_e", 0.)
 
-
+# Find FBA objective value
 original_FBA_val = cbm.doFBA(intermediate_cmod)
 
 """Filter infeasible reactions in intermediate_cmod (reactions with zero lower and upper bound)."""
