@@ -51,7 +51,7 @@ if model_name == "e_coli_core":
     #DROP_MODEL_TAGS = []
     DROP_MODEL_TAGS = ['active', 'fva', 'ko']
     # Set own constraints (no constraint on ATP, constraint on O2 though)
-    ECOLI_BOUNDS = 'forced_etoh' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
+    ECOLI_BOUNDS = 'with_atpm' # choose from wo_atpm_one_constr, wo_atpm, with_atpm, forced_etoh
     glc_reaction = intermediate_cmod.getReaction('R_EX_glc__D_e')
     #glc_reaction.setUpperBound(-8.)
     glc_reaction.setLowerBound(-10.)
