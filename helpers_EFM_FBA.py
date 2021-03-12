@@ -780,15 +780,19 @@ def plot_costs(model_dict, infos_obj, infos_cons, cons_IDs=[], obj_val=0.33, sho
         if objective_dict['obj_cons'] == 'obj':
             x_llims.append(-0.05)
             x_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 0]) * 1.1)))
+            # x_ulims.append(2)
             if not vector_focus:
                 x_ulims.append(max(cost_df[cons_IDs[0]]) * 1.1)
                 x_llims.append(min(0, min(cost_df[cons_IDs[0]])))
             y_llims.append(-0.05)
             y_ulims.append(max(1.1, min(5 * scaling_factor / obj_val, max(cost_df.values[:, 1]) * 1.1)))
+            # y_ulims.append(2)
             if not vector_focus:
                 y_ulims.append(max(cost_df[cons_IDs[1]]) * 1.1)
                 y_llims.append(min(0, min(cost_df[cons_IDs[1]])))
         else:
+            # x_ulims.append(0.5)
+            # y_ulims.append(0.5)
             x_ulims.append(1.1)
             y_ulims.append(1.1)
             x_llims.append(-0.05)

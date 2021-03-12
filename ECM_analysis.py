@@ -8,10 +8,10 @@ from helpers_EFM_FBA import *
 model_name = "e_coli_core"
 # With the following models, some shit goes wrong always
 # model_name = "iJR904"
-# model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
+model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
 # model_name = "MG1363_20190628"
-#model_name = "iIT341" # Helicobacter pylori 26695 works.
-#model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
+# model_name = "iIT341" # Helicobacter pylori 26695 works.
+# model_name = "iYO844" # Bacillus subtilis subsp. subtilis str. 168; works
 
 # Define directories for storing: 1) newly made models, 2) results such as figures, and 3) for finding models
 sbml_dir = os.path.join(os.getcwd(), "data", model_name + "_2", 'models', 'sbml')
@@ -329,6 +329,19 @@ for rid in intermediate_cmod.getReactionIds():
 cbm.doFBA(intermediate_cmod)
 cbm.doFBAMinSum(intermediate_cmod)
 
+"""Find the relevant, i.e., growth-limiting, constraints for the original model"""
+# Do non-zero reduced cost analysis
+cbm.analyzeModel(intermediate_cmod)
+nzrc_dictionaries, n_objectives = get_nzrc(intermediate_cmod)
+cbm.doFBAMinSum(intermediate_cmod)
+
+"""Check which metabolite is coupled to the constrained reactions. If no metab is coupled, tag the reaction
+with a virtual metabolite"""
+nzrc_dictionaries, reactions_to_tag = findConstraintMetabolites(nzrc_dictionaries, intermediate_cmod)
+
+"""Determine active objective function. Split the non-zero reduced costs in objectives and constraints"""
+infos_obj, infos_cons = get_info_objectives_constraints(nzrc_dictionaries, intermediate_cmod)
+
 """Create list with a dictionary in which all info will be stored for each model"""
 list_model_dicts = []
 
@@ -399,19 +412,6 @@ for model_dict in list_model_dicts:
         cbm.writeSBML3FBCV2(model, os.path.join(result_dir, model_id + ".xml"), add_cbmpy_annot=False)
 
 full_model_path = list_model_dicts[0]['model_path']
-
-"""Find the relevant, i.e., growth-limiting, constraints for the original model"""
-# Do non-zero reduced cost analysis
-cbm.analyzeModel(intermediate_cmod)
-nzrc_dictionaries, n_objectives = get_nzrc(intermediate_cmod)
-cbm.doFBAMinSum(intermediate_cmod)
-
-"""Check which metabolite is coupled to the constrained reactions. If no metab is coupled, tag the reaction
-with a virtual metabolite"""
-nzrc_dictionaries, reactions_to_tag = findConstraintMetabolites(nzrc_dictionaries, intermediate_cmod)
-
-"""Determine active objective function. Split the non-zero reduced costs in objectives and constraints"""
-infos_obj, infos_cons = get_info_objectives_constraints(nzrc_dictionaries, intermediate_cmod)
 
 """Get relevant metabolites for the cost-calculations, find indices of external metabs that can be ignored"""
 # We only have to focus on conversions of metabolites that are somehow active in a constraint
@@ -504,7 +504,6 @@ for model_ind, counted_model in enumerate(list_n_ECMs):
     print('Model %d has %d metabolites, %d reactions and %d ECMs' % (
         model_ind, counted_model[1], counted_model[2], counted_model[0]))
 
-# TODO: Add annotation to Matlab-file
 """Select only the relevant part of the ECM information. So, only the consumption/production flux of metabolites that
     are associated to a flux bound."""
 for model_dict in list_model_dicts:

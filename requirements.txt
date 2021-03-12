@@ -1,6 +1,7 @@
-cbmpy
+cbmpy==0.7.25
 numpy
 matplotlib
 pandas
 scipy
 ecmtool
+xlrd==1.2.0
