@@ -9,9 +9,9 @@ Open a conda command prompt in **elevated mode** and change the directory to whe
 Activate your new environment with `conda activate EM_based_FBA_rationale`
 
 ### Pip only install for necessary packages without Anaconda
-"""
+```
 pip install -r requirements.txt
-"""
+```
 
 ## Contact details:
 
