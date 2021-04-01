@@ -2,6 +2,13 @@ import itertools
 
 from helpers_EFM_FBA import *
 
+
+"""
+NOTE: Run this script three times with different uptake bounds for oxygen uptake (-15, -10, -5) to generate three cost 
+vector plots that are the base for fig 3.
+"""
+
+
 """CONSTANTS"""
 model_name = "iJR904"
 
@@ -240,22 +247,6 @@ if len(constrained_ext_metabs) > 1:
 else:
     cons_ID_combi_list = None
 
-if cons_ID_combi_list:
-    for cons_ID_combi in cons_ID_combi_list:
-        # Plot the results of the different models (with different (sub)networks) in one plot
-        plot_different_approaches_one_figure(list_model_dicts, infos_obj,  # list_model_dicts_remember[0]['infos_obj'],
-                                             infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
-                                             obj_val=objective_val,
-                                             result_dir=result_dir, cons_IDs=cons_ID_combi)
-else:
-    # Select constraints that will be plotted in this figure
-    cons_for_fig = constrained_ext_metabs
-    # Plot the results of the different models (with different (sub)networks) in one plot
-    plot_different_approaches_one_figure(list_model_dicts, infos_obj,  # list_model_dicts_remember[0]['infos_obj'],
-                                             infos_cons,  # list_model_dicts_remember[0]['infos_cons'],
-                                             obj_val=objective_val,
-                                             result_dir=result_dir, cons_IDs=cons_for_fig)
-
 # Now make for each approach for which we calculated the activities of the ECMs a different plot in which the usage of
 # the ECMs is shown with vectors.
 if cons_ID_combi_list:
@@ -267,15 +258,6 @@ if cons_ID_combi_list:
                 plot_costs_flux(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
                            cons_IDs=cons_ID_combi, obj_val=objective_val,
                            show_active=True, result_dir=result_dir, squared_plot=False)
-                plot_costs_ECMs(model_dict, infos_cons, cons_IDs=cons_ID_combi, result_dir=result_dir)
-else:
-    for model_dict in list_model_dicts:
-        if model_dict['get_activities']:
-            print('Plotting the cost vectors including usage for model %s' % model_dict['model_name'])
-            plot_costs(model_dict, infos_obj, infos_cons,  # model_dict['infos_obj'], model_dict['infos_cons'],
-                       cons_IDs=constrained_ext_metabs, obj_val=objective_val,
-                       show_active=True, result_dir=result_dir)
-            plot_costs_ECMs(model_dict, infos_cons, cons_IDs=constrained_ext_metabs, result_dir=result_dir)
 
 """Find corresponding EFM(s) for active ECM(s)"""
 # Find some EFM that corresponds to each of the active ECMs in the hidden-network
@@ -296,24 +278,3 @@ for model_dict in list_model_dicts:
         if VERBOSE:
             printable_ecms = full_relevant_ecms_df.sort_values('M_glc__D_e')/2
             print_ecms_direct(np.transpose(printable_ecms.values), full_relevant_ecms_df.columns)
-
-
-# # Todo: find differences/similarities between ECMs and EFMs
-# a = full_relevant_ecms_df.iloc[0]-full_relevant_ecms_df.iloc[1]
-# a.to_numpy().nonzero()
-# full_relevant_ecms_df.iloc[:,a.to_numpy().nonzero()[0]]
-#
-# b = relevant_efms_df.iloc[0] - relevant_efms_df.iloc[1]
-# b.to_numpy().nonzero()
-# relevant_efms_df.iloc[:,b.to_numpy().nonzero()[0]]
-#
-# print(relevant_efms_df.iloc[:,b.to_numpy()>1.].transpose())
-#
-# for rid in relevant_efms_df.iloc[:,b.to_numpy()>1.].transpose().index:
-#     reaction = intermediate_cmod.getReaction(rid)
-#     print(reaction.getName())
-#     print(relevant_efms_df[rid])
-#     print(reaction.getEquation())
-
-
-
