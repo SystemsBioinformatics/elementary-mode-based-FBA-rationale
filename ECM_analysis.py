@@ -3,7 +3,6 @@ import itertools
 from helpers_EFM_FBA import *
 
 """CONSTANTS"""
-# TODO: Try a bigger model
 model_name = "e_coli_core"
 # model_name = "iJR904"
 model_name = "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
@@ -193,6 +192,14 @@ elif model_name == "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
                                             teusink2009_bounds[teusink2009_bounds['RID'] == "R_EX_o2_e"]['LOWER BOUND'][0],
                                             teusink2009_bounds[teusink2009_bounds['RID'] == "R_EX_o2_e"]['UPPER BOUND'][0])
 
+        # Change all UB 999999 to inf and all LB -999999 to -inf
+        reactions = cmod.getReactionIds()
+        for rid in reactions:
+            if intermediate_cmod.getReactionLowerBound(rid) == -999999:
+                intermediate_cmod.setReactionLowerBound(rid, -np.inf)
+            if intermediate_cmod.getReactionUpperBound(rid) == 999999.:
+                intermediate_cmod.setReactionUpperBound(rid, np.inf)
+
     elif PLANTARUM_BOUNDS == 'teusink2009_medium':
         filepath = os.path.join(result_dir, "..", "Teusink2009bounds.xlsx")
         teusink2009_bounds = pd.read_excel(filepath, index_col=1, sheet_name='Medium')
@@ -231,6 +238,14 @@ elif model_name == "Lactobacillus_plantarum_WCFS1_Official_23_May_2019_18_45_01"
                                                 0],
                                             teusink2009_bounds[teusink2009_bounds['RID'] == "R_EX_o2_e"]['UPPER BOUND'][
                                                 0])
+
+        # Change all UB 999999 to inf and all LB -999999 to -inf
+        reactions = cmod.getReactionIds()
+        for rid in reactions:
+            if intermediate_cmod.getReactionLowerBound(rid) == -999999:
+                intermediate_cmod.setReactionLowerBound(rid, -np.inf)
+            if intermediate_cmod.getReactionUpperBound(rid) == 999999.:
+                intermediate_cmod.setReactionUpperBound(rid, np.inf)
 
 original_FBA_val = cbm.doFBA(intermediate_cmod)
 
