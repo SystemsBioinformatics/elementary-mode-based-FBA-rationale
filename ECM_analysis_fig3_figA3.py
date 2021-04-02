@@ -278,3 +278,27 @@ for model_dict in list_model_dicts:
         if VERBOSE:
             printable_ecms = full_relevant_ecms_df.sort_values('M_glc__D_e')/2
             print_ecms_direct(np.transpose(printable_ecms.values), full_relevant_ecms_df.columns)
+
+
+""" Supplemental figure A4 on ECM product formation per oxygen uptake """
+# Select relevant ECMs and relevant metabolites
+relevant_reactions = ["M_ac_e", "M_co2_e", "M_etoh_e", "M_for_e", "M_glc__D_e", "M_glyald_e", "M_glyclt_e", "M_h2o_e", "M_h_e", "M_o2_e", "M_succ_e", "objective"]
+relevant_ECMs = full_relevant_ecms_df[full_relevant_ecms_df['objective']!=0.]
+sorted_ecms = relevant_ECMs.sort_values('M_o2_e')
+sorted_ecms[relevant_reactions]
+
+# Select metabolites to be plotted
+plot_metabolites = ["M_ac_e", "M_co2_e", "M_etoh_e", "M_for_e", "M_glyald_e", "M_glyclt_e", "M_succ_e"]
+
+# Make plot
+fig, ax = plt.subplots(1, 1, figsize=(7, 4))
+for metabolite in plot_metabolites:
+    # plot rates per 0.5 unit biomass
+    plt.scatter(x=sorted_ecms['M_o2_e']/2, y=sorted_ecms[metabolite]/2, label=intermediate_cmod.getSpecies(metabolite).getName().split(" ")[0])
+plt.legend(loc='upper center', ncol=2)
+plt.ylabel('Product formation per 0.5 unit biomass')
+plt.xlabel('Oxygen uptake per 0.5 unit biomass')
+plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".png"))
+plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".pdf"))
+plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".svg"))
+plt.show()
