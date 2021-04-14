@@ -10,12 +10,17 @@ import pandas as pd
 from matplotlib import cm
 import matplotlib.cm as mplcm
 import matplotlib.colors as colors
+import matplotlib
+
 from scipy.optimize import linprog
 
 from ecmtool import extract_sbml_stoichiometry, get_conversion_cone
 from ecmtool.helpers import to_fractions, unique
 from ecmtool.network import add_reaction_tags  # was updated in v.0.1.6, was add_debug_tags
 
+# Set matplotlib params such that text is editable text
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def findConstraintMetabolites(nzrc_dictionaries, intermediate_cmod):
     """
