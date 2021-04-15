@@ -292,40 +292,6 @@ sorted_ecms['Y_biomass_glc'] = sorted_ecms['objective']/-sorted_ecms['M_glc__D_e
 # Select metabolites to be plotted
 plot_metabolites = ["M_ac_e", "M_co2_e", "M_etoh_e", "M_for_e", "M_glyclt_e", "M_succ_e"]
 
-# Make plot: product_formation_per_oxygen_uptake
-fig, ax = plt.subplots(1, 1, figsize=(7, 4))
-for metabolite in plot_metabolites:
-    # plot rates per 0.5 unit biomass
-    #plt.scatter(x=sorted_ecms['M_o2_e']/2, y=sorted_ecms[metabolite]/2,
-    plt.plot('M_o2_e', metabolite, data=sorted_ecms,
-                label=intermediate_cmod.getSpecies(metabolite).getName().split(" ")[0],
-                marker='.',
-                linestyle='-')
-plt.legend(loc='upper left', ncol=2)
-plt.ylabel('Product formation per 0.5 unit biomass')
-plt.xlabel('Oxygen uptake per 0.5 unit biomass')
-plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".png"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".pdf"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_oxygen_uptake" + ".svg"))
-plt.show()
-
-# Make plot: product_formation_per_biomass_yield_glucose
-fig, ax = plt.subplots(1, 1) #, figsize=(7, 4))
-for metabolite in plot_metabolites:
-    # plot rates per 0.5 unit biomass
-    plt.plot('Y_biomass_glc', metabolite, data=sorted_ecms,
-                label=intermediate_cmod.getSpecies(metabolite).getName().split(" ")[0],
-                marker='.',
-                linestyle='-')
-ax.invert_xaxis()
-plt.legend(loc='upper left', ncol=2)
-plt.ylabel('Product formation per 0.5 unit biomass')
-plt.xlabel('Biomass yield on glucose')
-plt.savefig(os.path.join(result_dir, "product_formation_per_biomass_yield_glucose" + ".png"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_biomass_yield_glucose" + ".pdf"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_biomass_yield_glucose" + ".svg"))
-plt.show()
-
 # Make plot: product_formation_per_ox_per_glc
 fig, ax = plt.subplots(1, 1) #, figsize=(7, 4))
 for metabolite in plot_metabolites:
@@ -342,25 +308,4 @@ plt.tight_layout()
 plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc" + ".png"))
 plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc" + ".pdf"))
 plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc" + ".svg"))
-plt.show()
-
-
-# Make plot: product_formation_per_ox_per_glc_roundedX"
-xticks_fig = [str(round(i,3)) for i in sorted_ecms['ox_per_glc']]
-
-fig, ax = plt.subplots(1, 1) #, figsize=(7, 4))
-for metabolite in plot_metabolites:
-    # plot rates per 0.5 unit biomass
-    plt.plot(xticks_fig, sorted_ecms[metabolite]/2,
-                label=intermediate_cmod.getSpecies(metabolite).getName().split(" ")[0],
-                marker='.',
-                linestyle='-')
-plt.legend(loc='upper left', ncol=2)
-plt.ylabel('Product formation per 0.5 unit biomass')
-plt.xlabel('Oxygen per glucose')
-plt.xticks(rotation = 90)
-plt.tight_layout()
-plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc_roundedX" + ".png"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc_roundedX" + ".pdf"))
-plt.savefig(os.path.join(result_dir, "product_formation_per_ox_per_glc_roundedX" + ".svg"))
 plt.show()
